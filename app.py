@@ -177,7 +177,7 @@ else:
                     with col1:
                         st.write("#### Risk Assessment")
                         if risk_score > 60:
-                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
+                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="�")
                         elif risk_score > 30:
                             st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                         else:
@@ -209,17 +209,22 @@ else:
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
                     
-                    # --- DEFINITIVE FIX FOR SHAP ---
-                    # For binary classifiers, shap_values is a list of two arrays (one for each class)
-                    # We need the values for the "dropout" class, which is class 1.
+                    # --- ROBUST SHAP VALUE HANDLING ---
                     shap_values = shap_explainer.shap_values(input_data_transformed)
-                    shap_values_for_class_1 = shap_values[1]
                     
-                    # The expected_value is also a list of two values. We need the one for class 1.
-                    expected_value_for_class_1 = shap_explainer.expected_value[1]
+                    # Check if shap_values is a list (for binary classification) or a single array
+                    if isinstance(shap_values, list) and len(shap_values) > 1:
+                        shap_values_for_plot = shap_values[1]
+                        expected_value_for_plot = shap_explainer.expected_value[1]
+                    else:
+                        shap_values_for_plot = shap_values
+                        if isinstance(shap_explainer.expected_value, list):
+                            expected_value_for_plot = shap_explainer.expected_value[1]
+                        else:
+                            expected_value_for_plot = shap_explainer.expected_value
 
-                    # Create the plot with the correct values
-                    st_shap(shap.force_plot(expected_value_for_class_1, shap_values_for_class_1[0,:], input_data_df.iloc[0,:]))
+                    # Create the plot with the correct values for the single instance
+                    st_shap(shap.force_plot(expected_value_for_plot, shap_values_for_plot[0,:], input_data_df.iloc[0,:]))
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
