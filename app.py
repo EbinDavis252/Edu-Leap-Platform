@@ -4,7 +4,7 @@ import numpy as np
 import joblib
 import io
 import shap
-import matplotlib
+import matplotlib.pyplot as plt
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -77,11 +77,6 @@ def logout():
     st.session_state['logged_in'] = False
     st.session_state.pop('username', None)
     st.rerun()
-
-def st_shap(plot, height=None):
-    """Renders a SHAP plot in Streamlit."""
-    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
-    st.components.v1.html(shap_html, height=height)
 
 # --- Main Application ---
 
@@ -177,7 +172,7 @@ else:
                     with col1:
                         st.write("#### Risk Assessment")
                         if risk_score > 60:
-                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="�")
+                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
                         elif risk_score > 30:
                             st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                         else:
@@ -204,27 +199,35 @@ else:
                     
                     st.markdown("---")
                     st.write("#### Key Risk Factors (SHAP Analysis)")
-                    st.markdown("This chart shows which features are pushing the prediction higher (red) or lower (blue).")
+                    st.markdown("This chart shows the impact of each feature on the dropout prediction. Red bars increase risk, blue bars decrease it.")
                     
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
                     
-                    # --- ROBUST SHAP VALUE HANDLING ---
+                    # --- STABLE SHAP VALUE HANDLING & VISUALIZATION ---
                     shap_values = shap_explainer.shap_values(input_data_transformed)
                     
-                    # Check if shap_values is a list (for binary classification) or a single array
                     if isinstance(shap_values, list) and len(shap_values) > 1:
                         shap_values_for_plot = shap_values[1]
-                        expected_value_for_plot = shap_explainer.expected_value[1]
                     else:
                         shap_values_for_plot = shap_values
-                        if isinstance(shap_explainer.expected_value, list):
-                            expected_value_for_plot = shap_explainer.expected_value[1]
-                        else:
-                            expected_value_for_plot = shap_explainer.expected_value
 
-                    # Create the plot with the correct values for the single instance
-                    st_shap(shap.force_plot(expected_value_for_plot, shap_values_for_plot[0,:], input_data_df.iloc[0,:]))
+                    # Create a DataFrame for the SHAP values
+                    shap_df = pd.DataFrame(
+                        shap_values_for_plot,
+                        columns=model_features
+                    ).T.reset_index()
+                    shap_df.columns = ['Feature', 'SHAP_Value']
+                    shap_df['Color'] = ['red' if val > 0 else 'blue' for val in shap_df['SHAP_Value']]
+                    shap_df = shap_df.sort_values(by='SHAP_Value', ascending=False)
+                    
+                    # Create and display the bar chart
+                    fig, ax = plt.subplots()
+                    ax.barh(shap_df['Feature'], shap_df['SHAP_Value'], color=shap_df['Color'])
+                    ax.set_xlabel("SHAP Value (Impact on Dropout Risk)")
+                    ax.set_title("Feature Impact on Prediction")
+                    ax.axvline(0, color='grey', linewidth=0.8)
+                    st.pyplot(fig)
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
