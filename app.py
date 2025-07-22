@@ -11,9 +11,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- File Paths & Constants ---
-MODEL_PATH = 'attrition_model.joblib'
-
 # --- Initialize Session State ---
 # This is where we will store login status, username, and our user database for the session.
 if 'logged_in' not in st.session_state:
@@ -24,6 +21,9 @@ if 'users' not in st.session_state:
         "admin": "admin123",
         "guest": "guest"
     }
+
+# --- File Paths & Constants ---
+MODEL_PATH = 'attrition_model.joblib'
 
 # --- Data and Model Loading Functions (Cached) ---
 
@@ -76,7 +76,7 @@ def check_login(username, password):
         st.session_state['logged_in'] = True
         st.session_state['username'] = username
         st.success("Logged in successfully!")
-        st.experimental_rerun()
+        st.rerun() # CORRECTED: Using st.rerun()
     else:
         st.error("Incorrect username or password")
 
@@ -95,7 +95,7 @@ def logout():
     """Logs the user out."""
     st.session_state['logged_in'] = False
     st.session_state.pop('username', None)
-    st.experimental_rerun()
+    st.rerun() # CORRECTED: Using st.rerun()
 
 # --- Main Application Logic ---
 
