@@ -71,6 +71,7 @@ def register_user(username, password):
     else:
         st.session_state['users'][username] = password
         st.success("Registration successful! Please log in.")
+        st.rerun()
 
 def logout():
     st.session_state['logged_in'] = False
@@ -184,7 +185,6 @@ else:
                     
                     with col2:
                         st.write("#### Recommended Interventions")
-                        # Note: Recommendations are rule-based and don't use SHAP
                         def get_recommendations(student_data):
                             recommendations = []
                             if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
@@ -208,9 +208,18 @@ else:
                     
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
-                    shap_values = shap_explainer.shap_values(input_data_transformed)
                     
-                    st_shap(shap.force_plot(shap_explainer.expected_value, shap_values[0,:], input_data_df.iloc[0,:]))
+                    # --- DEFINITIVE FIX FOR SHAP ---
+                    # For binary classifiers, shap_values is a list of two arrays (one for each class)
+                    # We need the values for the "dropout" class, which is class 1.
+                    shap_values = shap_explainer.shap_values(input_data_transformed)
+                    shap_values_for_class_1 = shap_values[1]
+                    
+                    # The expected_value is also a list of two values. We need the one for class 1.
+                    expected_value_for_class_1 = shap_explainer.expected_value[1]
+
+                    # Create the plot with the correct values
+                    st_shap(shap.force_plot(expected_value_for_class_1, shap_values_for_class_1[0,:], input_data_df.iloc[0,:]))
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
