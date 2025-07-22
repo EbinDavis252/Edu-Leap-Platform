@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import io
+import shap
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -12,34 +13,36 @@ st.set_page_config(
 )
 
 # --- Initialize Session State ---
-# This is where we will store login status, username, and our user database for the session.
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'users' not in st.session_state:
-    # Pre-populate with default users. In a real app, this would come from a secure database.
-    st.session_state['users'] = {
-        "admin": "admin123",
-        "guest": "guest"
-    }
+    st.session_state['users'] = {"admin": "admin123", "guest": "guest"}
+# Add a new state to store notes for students
+if 'student_notes' not in st.session_state:
+    st.session_state['student_notes'] = {}
 
 # --- File Paths & Constants ---
 MODEL_PATH = 'attrition_model.joblib'
+# We assume a SHAP explainer has been pre-calculated and saved.
+# I will provide the script to generate this file.
+SHAP_EXPLAINER_PATH = 'shap_explainer.joblib' 
 
 # --- Data and Model Loading Functions (Cached) ---
 
 @st.cache_resource
-def load_model():
-    """Loads the trained machine learning model from file."""
+def load_model_and_explainer():
+    """Loads the ML model and the SHAP explainer."""
     try:
         model = joblib.load(MODEL_PATH)
-        return model
+        explainer = joblib.load(SHAP_EXPLAINER_PATH)
+        return model, explainer
     except FileNotFoundError:
-        st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please ensure it is in the GitHub repository.")
-        return None
+        st.error(f"Fatal Error: Model or SHAP explainer file not found. Please ensure '{MODEL_PATH}' and '{SHAP_EXPLAINER_PATH}' are in the GitHub repository.")
+        return None, None
 
 @st.cache_data
 def load_and_prepare_data(uploaded_file):
-    """Reads data from the user's uploaded file and adds 'Joining_Year'."""
+    """Reads data from the user's uploaded file and prepares it."""
     try:
         df = pd.read_csv(uploaded_file)
         if 'Joining_Year' not in df.columns:
@@ -48,112 +51,142 @@ def load_and_prepare_data(uploaded_file):
             df['Joining_Year'] = np.random.choice(years, size=len(df))
         return df
     except Exception as e:
-        st.error(f"An error occurred while loading or processing the data: {e}")
+        st.error(f"An error occurred while loading data: {e}")
         return None
 
-# --- AI & Financial Logic Functions ---
-
-def get_recommendations(student_data):
-    """Generates intervention recommendations based on student data."""
-    recommendations = []
-    if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
-        recommendations.append("🚨 **High Priority: Financial Counseling.** Connect the student with the financial aid office immediately to discuss payment plans or emergency aid.")
-    elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
-        recommendations.append("⚠️ **Financial Follow-up:** Send a reminder about fee deadlines and offer information on financial support services.")
-    if student_data['Avg_Attendance'].iloc[0] < 65:
-        recommendations.append("📚 **Academic Mentorship:** Low attendance is a strong indicator of disengagement. Assign a faculty or peer mentor to check in with the student.")
-    if student_data['Final_CGPA'].iloc[0] < 6.0:
-        recommendations.append("📖 **Tutoring Services:** Proactively offer and enroll the student in subject-specific tutoring or academic skills workshops.")
-    if not recommendations:
-        recommendations.append("✅ **Monitor Standard Progress:** No immediate high-risk factors detected based on primary rules. Continue standard monitoring.")
-    return recommendations
-
-# --- Authentication Functions ---
+# --- Authentication & UI Functions ---
 
 def check_login(username, password):
-    """Checks user credentials against the session state user database."""
     if username in st.session_state['users'] and st.session_state['users'][username] == password:
         st.session_state['logged_in'] = True
         st.session_state['username'] = username
-        st.success("Logged in successfully!")
-        st.rerun() # CORRECTED: Using st.rerun()
+        st.rerun()
     else:
         st.error("Incorrect username or password")
 
 def register_user(username, password):
-    """Registers a new user."""
     if not username or not password:
         st.warning("Username and password cannot be empty.")
         return
     if username in st.session_state['users']:
-        st.error("Username already exists. Please choose another one.")
+        st.error("Username already exists.")
     else:
         st.session_state['users'][username] = password
-        st.success("Registration successful! You can now log in with your new credentials.")
+        st.success("Registration successful! Please log in.")
 
 def logout():
-    """Logs the user out."""
     st.session_state['logged_in'] = False
     st.session_state.pop('username', None)
-    st.rerun() # CORRECTED: Using st.rerun()
+    st.rerun()
+
+# This function is needed to render the SHAP plot in Streamlit
+@st.cache_data
+def st_shap(plot, height=None):
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    st.components.v1.html(shap_html, height=height)
 
 # --- Main Application Logic ---
 
-# --- LOGIN / REGISTRATION SCREEN ---
 if not st.session_state['logged_in']:
     st.title("🎓 Welcome to Edu-Leap")
-    
     login_tab, register_tab = st.tabs(["Login", "Register"])
-
     with login_tab:
         st.header("Login")
         with st.form("login_form"):
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            submitted = st.form_submit_button("Login")
-            if submitted:
+            username = st.text_input("Username", key="login_user")
+            password = st.text_input("Password", type="password", key="login_pass")
+            if st.form_submit_button("Login"):
                 check_login(username, password)
         st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
-
     with register_tab:
         st.header("Register New User")
         with st.form("register_form"):
-            new_username = st.text_input("Choose a Username", key="reg_username")
-            new_password = st.text_input("Choose a Password", type="password", key="reg_password")
-            register_submitted = st.form_submit_button("Register")
-            if register_submitted:
+            new_username = st.text_input("Choose a Username", key="reg_user")
+            new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
+            if st.form_submit_button("Register"):
                 register_user(new_username, new_password)
-
-# --- MAIN APP (if logged in) ---
 else:
-    model = load_model()
-    if model is None:
+    model, shap_explainer = load_model_and_explainer()
+    if model is None or shap_explainer is None:
         st.stop()
     
     st.sidebar.title(f"Welcome, {st.session_state['username']}!")
     st.sidebar.header("1. Upload Your Data")
-    uploaded_file = st.sidebar.file_uploader(
-        "Upload a CSV file with student data.",
-        type="csv"
-    )
+    uploaded_file = st.sidebar.file_uploader("Upload a CSV file with student data.", type="csv")
 
     if uploaded_file is not None:
         student_df = load_and_prepare_data(uploaded_file)
-        
         if student_df is not None:
             st.title("🚀 Edu-Leap: AI Decision Platform")
-            
             st.sidebar.header("2. Navigate Dashboards")
             page = st.sidebar.radio("Go to", [
                 "Dashboard Overview", 
                 "Historical Trends", 
                 "Risk Prediction & Recommendations", 
                 "Financial 'What-If' Simulator",
-                "At-Risk Students Report"
+                "At-Risk Students Report & Actions"
             ])
 
-            # ... (All page logic remains the same as before) ...
-            if page == "Dashboard Overview":
+            if page == "Risk Prediction & Recommendations":
+                st.header("🔍 Advanced Risk Prediction with SHAP Explanations")
+                st.markdown("Select a student to see their risk score and the key factors driving the prediction.")
+                
+                student_id_to_check = st.selectbox("Select Student ID", options=student_df['StudentID'].unique())
+                if student_id_to_check:
+                    student_data = student_df[student_df['StudentID'] == student_id_to_check]
+                    st.write("#### Student Profile")
+                    st.write(student_data[['Course_Name', 'Final_CGPA', 'Avg_Attendance', 'Fee_Payment_Status']])
+
+                    model_features = model.feature_names_in_
+                    input_data_df = student_data[model_features]
+                    
+                    # Pre-process the data for SHAP (using the model's preprocessor)
+                    preprocessor = model.named_steps['preprocessor']
+                    input_data_transformed = preprocessor.transform(input_data_df)
+                    
+                    prediction_proba = model.predict_proba(input_data_df)[0][1]
+                    risk_score = prediction_proba * 100
+
+                    st.write("#### Risk Assessment")
+                    if risk_score > 60:
+                        st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
+                    elif risk_score > 30:
+                        st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
+                    else:
+                        st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
+
+                    st.write("#### Key Risk Factors (SHAP Analysis)")
+                    st.markdown("This chart shows which features are pushing the prediction higher (red) or lower (blue).")
+                    shap_values = shap_explainer.shap_values(input_data_transformed)
+                    st_shap(shap.force_plot(shap_explainer.expected_value, shap_values[0,:], input_data_df.iloc[0,:]))
+
+            elif page == "At-Risk Students Report & Actions":
+                st.header("📝 At-Risk Students Report & Action Tracker")
+                model_features = model.feature_names_in_
+                risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
+                report_df = student_df.copy()
+                report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
+                
+                risk_threshold = st.slider("Select Risk Threshold (%)", 0, 100, 60)
+                at_risk_students = report_df[report_df['Risk_Probability_%'] > risk_threshold].sort_values(by='Risk_Probability_%', ascending=False)
+                st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
+
+                for index, row in at_risk_students.iterrows():
+                    student_id = row['StudentID']
+                    with st.expander(f"**ID: {student_id}** | Course: {row['Course_Name']} | Risk: {row['Risk_Probability_%']:.2f}%"):
+                        st.write(f"**Key Details:** CGPA: {row['Final_CGPA']}, Attendance: {row['Avg_Attendance']}%")
+                        
+                        # Note-taking and tracking area
+                        note_key = f"note_{student_id}"
+                        current_note = st.session_state['student_notes'].get(student_id, "")
+                        note_text = st.text_area("Add or Edit Note:", value=current_note, key=note_key)
+                        
+                        if st.button("Save Note", key=f"save_{student_id}"):
+                            st.session_state['student_notes'][student_id] = note_text
+                            st.success(f"Note saved for student {student_id}.")
+            
+            # Other pages remain the same
+            elif page == "Dashboard Overview":
                 st.header("Institutional Health Dashboard")
                 total_students = len(student_df)
                 model_features = model.feature_names_in_
@@ -192,50 +225,6 @@ else:
                 with col2:
                     st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
 
-            elif page == "Risk Prediction & Recommendations":
-                st.header("🔍 Manual Risk Prediction & AI Recommendations")
-                st.markdown("Enter a student's details manually to assess their dropout risk and receive tailored intervention strategies.")
-                with st.form("prediction_form"):
-                    st.subheader("Student Details")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        age = st.number_input("Age", 17, 25, 20)
-                        tenth_perc = st.number_input("10th Percentage", 0.0, 100.0, 85.0, format="%.2f")
-                        extracurricular_count = st.slider("Number of Extracurricular Activities", 0, 10, 2)
-                    with col2:
-                        city_tier = st.selectbox("City Tier", options=student_df['City_Tier'].unique())
-                        twelfth_perc = st.number_input("12th Percentage", 0.0, 100.0, 80.0, format="%.2f")
-                        fee_status = st.selectbox("Fee Payment Status", options=student_df['Fee_Payment_Status'].unique())
-                    with col3:
-                        state = st.selectbox("State", options=student_df['State'].unique())
-                        entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
-                        scholarship = st.selectbox("Scholarship Recipient", options=student_df['Scholarship_Recipient'].unique())
-                    course_name = st.selectbox("Course Name", options=student_df['Course_Name'].unique())
-                    department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
-                    st.info(f"Selected Department: **{department}**")
-                    avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
-                    final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0)
-                    submitted = st.form_submit_button("🔮 Predict Risk & Get Recommendations")
-                if submitted:
-                    model_features = model.feature_names_in_
-                    input_data = pd.DataFrame({'Age': [age], 'City_Tier': [city_tier], 'State': [state], '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc], 'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name], 'Department': [department], 'Fee_Payment_Status': [fee_status], 'Scholarship_Recipient': [scholarship], 'Extracurricular_Activity_Count': [extracurricular_count], 'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]})
-                    input_data = input_data[model_features]
-                    prediction_proba = model.predict_proba(input_data)[0][1]
-                    risk_score = prediction_proba * 100
-                    st.markdown("---")
-                    st.subheader("Results")
-                    st.write("#### Risk Assessment")
-                    if risk_score > 60:
-                        st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
-                    elif risk_score > 30:
-                        st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
-                    else:
-                        st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
-                    st.write("#### Recommended Interventions")
-                    recommendations = get_recommendations(input_data)
-                    for rec in recommendations:
-                        st.markdown(f"- {rec}")
-
             elif page == "Financial 'What-If' Simulator":
                 st.header("💰 Financial 'What-If' Simulator")
                 st.markdown("Model the financial impact of your intervention strategies.")
@@ -271,23 +260,9 @@ else:
                     st.error(f"**Projected Net Financial Impact: -₹{abs(net_impact):,.2f}**")
                     st.error(f"**Return on Investment (ROI): {roi:.2f}%**")
 
-            elif page == "At-Risk Students Report":
-                st.header("📄 At-Risk Students Report")
-                model_features = model.feature_names_in_
-                risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
-                report_df = student_df.copy()
-                report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
-                risk_threshold = st.slider("Select Risk Threshold (%)", 0, 100, 60)
-                at_risk_students = report_df[report_df['Risk_Probability_%'] > risk_threshold].sort_values(by='Risk_Probability_%', ascending=False)
-                st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
-                display_cols_ideal = ['StudentID', 'Course_Name', 'Final_CGPA', 'Avg_Attendance', 'Fee_Payment_Status', 'Joining_Year', 'Risk_Probability_%']
-                cols_to_display = [col for col in display_cols_ideal if col in at_risk_students.columns]
-                st.dataframe(at_risk_students[cols_to_display])
-
     else:
         st.info("Awaiting data file. Please upload a CSV to activate the dashboards.")
 
-    # Add a logout button at the bottom of the sidebar
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout"):
         logout()
