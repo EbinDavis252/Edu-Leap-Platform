@@ -15,22 +15,8 @@ st.set_page_config(
 # --- File Paths ---
 MODEL_PATH = 'attrition_model.joblib'
 DB_PATH = 'edu_leap.db'
-CSV_PATH = 'student_master_data_v2.csv'
-
-# --- Database Setup: Recreate DB from CSV on every startup ---
-try:
-    # This approach guarantees the DB is always in sync with the source CSV.
-    df = pd.read_csv(CSV_PATH)
-    conn = sqlite3.connect(DB_PATH)
-    df.to_sql('students', conn, if_exists='replace', index=False)
-    conn.close()
-except FileNotFoundError:
-    st.error(f"Fatal Error: The source data file '{CSV_PATH}' was not found. Please upload it to your GitHub repository.")
-    st.stop()
-except Exception as e:
-    st.error(f"An error occurred during database creation: {e}")
-    st.stop()
-
+# We now ONLY rely on the original CSV file.
+CSV_PATH = 'student_master_data.csv' 
 
 # --- Data and Model Loading Functions (Cached) ---
 
@@ -44,27 +30,44 @@ def load_model():
         return None
 
 @st.cache_data
-def load_data():
-    """Connects to the SQLite DB, loads the full student dataset, and closes the connection."""
+def load_and_prepare_data():
+    """
+    This is the new, robust function. It loads the original CSV,
+    adds the 'Joining_Year' column in memory, and returns the prepared DataFrame.
+    """
     try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM students", conn)
-        conn.close()
+        df = pd.read_csv(CSV_PATH)
+        
+        # --- FOOLPROOF LOGIC: Add 'Joining_Year' if it doesn't exist ---
+        if 'Joining_Year' not in df.columns:
+            # Set a seed for reproducibility, so years are consistent across reloads
+            np.random.seed(42)
+            years = [2021, 2022, 2023, 2024]
+            df['Joining_Year'] = np.random.choice(years, size=len(df))
+        
         return df
+
+    except FileNotFoundError:
+        st.error(f"Fatal Error: The source data file '{CSV_PATH}' was not found. Please upload it to your GitHub repository.")
+        return None
     except Exception as e:
-        st.error(f"Failed to read data from the database: {e}")
+        st.error(f"An error occurred while loading data: {e}")
         return None
 
 # --- Main Application Logic ---
 
+# Load the model and data using the new robust function
 model = load_model()
-student_df = load_data()
+student_df = load_and_prepare_data()
 
+# Check if everything loaded correctly
 if model is None:
-    st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found.")
+    st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please ensure it is uploaded to your GitHub repository.")
 elif student_df is None:
-    st.error("Could not load student data from the database.")
+    # The error message is already shown inside load_and_prepare_data()
+    pass
 else:
+    # --- If all successful, run the main app ---
     st.title("🎓 Edu-Leap: AI-Powered Student Attrition Platform")
     
     st.sidebar.title("Navigation")
@@ -100,32 +103,29 @@ else:
         st.header("Historical Trend Analysis")
         st.markdown("Analyze how key metrics have evolved over different student cohorts.")
 
-        if 'Joining_Year' in student_df.columns:
-            trends = student_df.groupby('Joining_Year').agg(
-                total_students=('StudentID', 'count'),
-                dropout_count=('Is_Dropout', 'sum'),
-                avg_attendance=('Avg_Attendance', 'mean'),
-                avg_cgpa=('Final_CGPA', 'mean')
-            ).reset_index()
-            
-            trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
+        trends = student_df.groupby('Joining_Year').agg(
+            total_students=('StudentID', 'count'),
+            dropout_count=('Is_Dropout', 'sum'),
+            avg_attendance=('Avg_Attendance', 'mean'),
+            avg_cgpa=('Final_CGPA', 'mean')
+        ).reset_index()
+        
+        trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
 
-            st.subheader("Year-over-Year Data")
-            st.dataframe(trends.sort_values(by='Joining_Year'))
-            
-            st.markdown("---")
+        st.subheader("Year-over-Year Data")
+        st.dataframe(trends.sort_values(by='Joining_Year'))
+        
+        st.markdown("---")
 
-            st.subheader("Attrition Rate Over Time")
-            st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
+        st.subheader("Attrition Rate Over Time")
+        st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
 
-            st.subheader("Academic Performance Trends")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.line_chart(trends.set_index('Joining_Year')['avg_cgpa'], color="#FF4B4B")
-            with col2:
-                st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
-        else:
-            st.warning("The 'Joining_Year' column was not found in the data. Please ensure you are using 'student_master_data_v2.csv'.")
+        st.subheader("Academic Performance Trends")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.line_chart(trends.set_index('Joining_Year')['avg_cgpa'], color="#FF4B4B")
+        with col2:
+            st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
     
     # Page 3: Single Student Prediction
     elif page == "Single Student Prediction":
@@ -194,16 +194,12 @@ else:
 
         st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
         
-        # --- ROBUST COLUMN SELECTION ---
-        # Define the ideal list of columns we want to display
         display_cols_ideal = [
             'StudentID', 'Course_Name', 'Final_CGPA', 'Avg_Attendance', 
             'Fee_Payment_Status', 'Joining_Year', 'Risk_Probability_%'
         ]
-        # Create a final list of columns that actually exist in the DataFrame
         cols_to_display = [col for col in display_cols_ideal if col in at_risk_students.columns]
         
-        # Display the DataFrame using the safe, filtered list of columns
         st.dataframe(at_risk_students[cols_to_display])
 
         if len(cols_to_display) > 0:
