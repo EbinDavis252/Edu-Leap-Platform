@@ -15,17 +15,15 @@ st.set_page_config(
 # --- File Paths ---
 MODEL_PATH = 'attrition_model.joblib'
 DB_PATH = 'edu_leap.db'
-CSV_PATH = 'student_master_data_v2.csv' # <-- IMPORTANT: Using the new v2 CSV
+CSV_PATH = 'student_master_data_v2.csv'
 
-# --- One-Time Setup: Create DB from CSV if it doesn't exist ---
+# --- Database Setup: Recreate DB from CSV on every startup ---
 try:
-    if not os.path.exists(DB_PATH):
-        st.toast("First time setup: Creating database from CSV...", icon="⚙️")
-        df = pd.read_csv(CSV_PATH)
-        conn = sqlite3.connect(DB_PATH)
-        df.to_sql('students', conn, if_exists='replace', index=False)
-        conn.close()
-        st.toast("Database ready!", icon="✅")
+    # This approach guarantees the DB is always in sync with the source CSV.
+    df = pd.read_csv(CSV_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    df.to_sql('students', conn, if_exists='replace', index=False)
+    conn.close()
 except FileNotFoundError:
     st.error(f"Fatal Error: The source data file '{CSV_PATH}' was not found. Please upload it to your GitHub repository.")
     st.stop()
@@ -33,10 +31,12 @@ except Exception as e:
     st.error(f"An error occurred during database creation: {e}")
     st.stop()
 
+
 # --- Data and Model Loading Functions (Cached) ---
 
 @st.cache_resource
 def load_model():
+    """Loads the trained machine learning model from file."""
     try:
         model = joblib.load(MODEL_PATH)
         return model
@@ -45,6 +45,7 @@ def load_model():
 
 @st.cache_data
 def load_data():
+    """Connects to the SQLite DB, loads the full student dataset, and closes the connection."""
     try:
         conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql_query("SELECT * FROM students", conn)
@@ -66,18 +67,17 @@ elif student_df is None:
 else:
     st.title("🎓 Edu-Leap: AI-Powered Student Attrition Platform")
     
-    # Sidebar for Navigation
     st.sidebar.title("Navigation")
-    # ADDED 'Historical Trend Dashboard' to the list
     page = st.sidebar.radio("Go to", ["Dashboard Overview", "Historical Trend Dashboard", "Single Student Prediction", "At-Risk Students Report"])
 
     # Page 1: Dashboard Overview
     if page == "Dashboard Overview":
         st.header("Institutional Health Dashboard (Overall)")
-        # ... (rest of the page code is the same)
         total_students = len(student_df)
         model_features = model.feature_names_in_
-        predictions = model.predict(student_df[model_features])
+        df_for_prediction = student_df[model_features]
+        
+        predictions = model.predict(df_for_prediction)
         num_at_risk = np.sum(predictions)
         attrition_rate = (num_at_risk / total_students) * 100 if total_students > 0 else 0
 
@@ -95,39 +95,39 @@ else:
         
         st.bar_chart(at_risk_by_dept)
 
-    # --- NEW PAGE: Historical Trend Dashboard ---
+    # Page 2: Historical Trend Dashboard
     elif page == "Historical Trend Dashboard":
         st.header("Historical Trend Analysis")
         st.markdown("Analyze how key metrics have evolved over different student cohorts.")
 
-        # Group data by joining year and calculate metrics
-        trends = student_df.groupby('Joining_Year').agg(
-            total_students=('StudentID', 'count'),
-            dropout_count=('Is_Dropout', 'sum'),
-            avg_attendance=('Avg_Attendance', 'mean'),
-            avg_cgpa=('Final_CGPA', 'mean')
-        ).reset_index()
-        
-        trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
+        if 'Joining_Year' in student_df.columns:
+            trends = student_df.groupby('Joining_Year').agg(
+                total_students=('StudentID', 'count'),
+                dropout_count=('Is_Dropout', 'sum'),
+                avg_attendance=('Avg_Attendance', 'mean'),
+                avg_cgpa=('Final_CGPA', 'mean')
+            ).reset_index()
+            
+            trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
 
-        # Display the trend data in a table
-        st.subheader("Year-over-Year Data")
-        st.dataframe(trends)
-        
-        st.markdown("---")
+            st.subheader("Year-over-Year Data")
+            st.dataframe(trends.sort_values(by='Joining_Year'))
+            
+            st.markdown("---")
 
-        # Plot the trends
-        st.subheader("Attrition Rate Over Time")
-        st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
+            st.subheader("Attrition Rate Over Time")
+            st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
 
-        st.subheader("Academic Performance Trends")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.line_chart(trends.set_index('Joining_Year')['avg_cgpa'])
-        with col2:
-            st.line_chart(trends.set_index('Joining_Year')['avg_attendance'])
+            st.subheader("Academic Performance Trends")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.line_chart(trends.set_index('Joining_Year')['avg_cgpa'], color="#FF4B4B")
+            with col2:
+                st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
+        else:
+            st.warning("The 'Joining_Year' column was not found in the data. Please ensure you are using 'student_master_data_v2.csv'.")
     
-    # ... (rest of the pages: Single Student Prediction, At-Risk Report are the same)
+    # Page 3: Single Student Prediction
     elif page == "Single Student Prediction":
         st.header("Predict Attrition for a Single Student")
         st.markdown("Enter the student's details below to get a risk prediction.")
@@ -152,13 +152,11 @@ else:
             course_name = st.selectbox("Course Name", options=student_df['Course_Name'].unique())
             department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
             st.info(f"Selected Department: **{department}**")
-            joining_year = st.selectbox("Joining Year", options=sorted(student_df['Joining_Year'].unique()))
-
-
+            
             submitted = st.form_submit_button("🔮 Predict Risk")
 
         if submitted:
-            input_features = model.feature_names_in_
+            model_features = model.feature_names_in_
             input_data = pd.DataFrame({
                 'Age': [age], 'City_Tier': [city_tier], 'State': [state],
                 '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc],
@@ -166,10 +164,9 @@ else:
                 'Department': [department], 'Fee_Payment_Status': [fee_status],
                 'Scholarship_Recipient': [scholarship],
                 'Extracurricular_Activity_Count': [extracurricular_count],
-                'Avg_Attendance': [75], 'Final_CGPA': [8.0],
-                'Joining_Year': [joining_year]
+                'Avg_Attendance': [75], 'Final_CGPA': [8.0]
             })
-            input_data = input_data[input_features]
+            input_data = input_data[model_features]
 
             prediction_proba = model.predict_proba(input_data)[0][1]
             risk_score = prediction_proba * 100
@@ -181,11 +178,14 @@ else:
             else:
                 st.success(f"Low Risk: There is a {risk_score:.2f}% probability this student will drop out.", icon="✅")
 
+    # Page 4: At-Risk Students Report
     elif page == "At-Risk Students Report":
         st.header("Report of At-Risk Students")
         
         model_features = model.feature_names_in_
-        risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
+        df_for_prediction = student_df[model_features]
+        risk_probabilities = model.predict_proba(df_for_prediction)[:, 1]
+        
         report_df = student_df.copy()
         report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
         
@@ -194,16 +194,27 @@ else:
 
         st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
         
-        st.dataframe(at_risk_students[['StudentID', 'Course_Name', 'Final_CGPA', 'Avg_Attendance', 'Fee_Payment_Status', 'Joining_Year', 'Risk_Probability_%']])
+        # --- ROBUST COLUMN SELECTION ---
+        # Define the ideal list of columns we want to display
+        display_cols_ideal = [
+            'StudentID', 'Course_Name', 'Final_CGPA', 'Avg_Attendance', 
+            'Fee_Payment_Status', 'Joining_Year', 'Risk_Probability_%'
+        ]
+        # Create a final list of columns that actually exist in the DataFrame
+        cols_to_display = [col for col in display_cols_ideal if col in at_risk_students.columns]
+        
+        # Display the DataFrame using the safe, filtered list of columns
+        st.dataframe(at_risk_students[cols_to_display])
 
-        @st.cache_data
-        def convert_df_to_csv(df):
-            return df.to_csv(index=False).encode('utf-8')
+        if len(cols_to_display) > 0:
+            @st.cache_data
+            def convert_df_to_csv(df):
+                return df.to_csv(index=False).encode('utf-8')
 
-        csv = convert_df_to_csv(at_risk_students)
-        st.download_button(
-            label="📥 Download Report as CSV",
-            data=csv,
-            file_name=f"at_risk_report_{risk_threshold}.csv",
-            mime="text/csv",
-        )
+            csv = convert_df_to_csv(at_risk_students[cols_to_display])
+            st.download_button(
+                label="📥 Download Report as CSV",
+                data=csv,
+                file_name=f"at_risk_report_{risk_threshold}.csv",
+                mime="text/csv",
+            )
