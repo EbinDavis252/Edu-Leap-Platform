@@ -42,10 +42,10 @@ def load_and_prepare_data(uploaded_file):
 
 # --- AI & Financial Logic Functions ---
 
-def get_recommendations(student_data, model):
+def get_recommendations(student_data):
     """Generates intervention recommendations based on student data."""
     recommendations = []
-    # Define simple rules based on key risk factors
+    # Use .iloc[0] because we are passing a single-row DataFrame
     if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
         recommendations.append("🚨 **High Priority: Financial Counseling.** Connect the student with the financial aid office immediately to discuss payment plans or emergency aid.")
     elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
@@ -83,7 +83,6 @@ if uploaded_file is not None:
         st.title("🚀 Edu-Leap: AI Decision Platform")
         
         st.sidebar.header("2. Navigate Dashboards")
-        # Added new pages
         page = st.sidebar.radio("Go to", [
             "Dashboard Overview", 
             "Historical Trends", 
@@ -96,9 +95,9 @@ if uploaded_file is not None:
         
         if page == "Dashboard Overview":
             st.header("Institutional Health Dashboard")
-            # ... (Code for this page remains the same)
             total_students = len(student_df)
             model_features = model.feature_names_in_
+            
             if not all(feature in student_df.columns for feature in model_features):
                 st.error("The uploaded CSV is missing one or more required columns for prediction.")
             else:
@@ -106,39 +105,102 @@ if uploaded_file is not None:
                 predictions = model.predict(df_for_prediction)
                 num_at_risk = np.sum(predictions)
                 attrition_rate = (num_at_risk / total_students) * 100 if total_students > 0 else 0
+                
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Total Students", f"{total_students}")
                 col2.metric("Predicted At-Risk Students", f"{num_at_risk}")
                 col3.metric("Predicted Attrition Rate", f"{attrition_rate:.2f}%")
+                
+                st.markdown("---")
+                
+                # --- RESTORED VISUALIZATION ---
+                st.subheader("Attrition by Department")
+                at_risk_df = student_df.copy()
+                at_risk_df['is_at_risk'] = predictions
+                at_risk_by_dept = at_risk_df[at_risk_df['is_at_risk'] == 1]['Department'].value_counts()
+                st.bar_chart(at_risk_by_dept)
 
         elif page == "Historical Trends":
             st.header("Historical Trend Analysis")
-            # ... (Code for this page remains the same)
-            trends = student_df.groupby('Joining_Year').agg(total_students=('StudentID', 'count'), dropout_count=('Is_Dropout', 'sum'), avg_attendance=('Avg_Attendance', 'mean'), avg_cgpa=('Final_CGPA', 'mean')).reset_index()
+            st.markdown("Analyze how key metrics have evolved over different student cohorts.")
+            
+            trends = student_df.groupby('Joining_Year').agg(
+                total_students=('StudentID', 'count'), 
+                dropout_count=('Is_Dropout', 'sum'), 
+                avg_attendance=('Avg_Attendance', 'mean'), 
+                avg_cgpa=('Final_CGPA', 'mean')
+            ).reset_index()
             trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
+            
             st.subheader("Year-over-Year Data")
             st.dataframe(trends.sort_values(by='Joining_Year'))
+            
+            st.markdown("---")
+
+            # --- RESTORED VISUALIZATIONS ---
             st.subheader("Attrition Rate Over Time")
             st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
 
-        elif page == "Risk Prediction & Recommendations":
-            st.header("🔍 Risk Prediction & AI Recommendations")
-            st.markdown("Select a student by their ID to assess their dropout risk and receive tailored intervention strategies.")
-            
-            # Select a student from the list
-            student_id_to_check = st.selectbox("Select Student ID", options=student_df['StudentID'].unique())
-            
-            if student_id_to_check:
-                student_data = student_df[student_df['StudentID'] == student_id_to_check]
-                st.write("#### Student Profile")
-                st.write(student_data[['Course_Name', 'Final_CGPA', 'Avg_Attendance', 'Fee_Payment_Status']])
+            st.subheader("Academic Performance Trends")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.line_chart(trends.set_index('Joining_Year')['avg_cgpa'], color="#FF4B4B")
+            with col2:
+                st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
 
-                # Predict risk
+        elif page == "Risk Prediction & Recommendations":
+            st.header("🔍 Manual Risk Prediction & AI Recommendations")
+            st.markdown("Enter a student's details manually to assess their dropout risk and receive tailored intervention strategies.")
+            
+            # --- RESTORED MANUAL INPUT FORM ---
+            with st.form("prediction_form"):
+                st.subheader("Student Details")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    age = st.number_input("Age", 17, 25, 20)
+                    tenth_perc = st.number_input("10th Percentage", 0.0, 100.0, 85.0, format="%.2f")
+                    extracurricular_count = st.slider("Number of Extracurricular Activities", 0, 10, 2)
+                
+                with col2:
+                    city_tier = st.selectbox("City Tier", options=student_df['City_Tier'].unique())
+                    twelfth_perc = st.number_input("12th Percentage", 0.0, 100.0, 80.0, format="%.2f")
+                    fee_status = st.selectbox("Fee Payment Status", options=student_df['Fee_Payment_Status'].unique())
+
+                with col3:
+                    state = st.selectbox("State", options=student_df['State'].unique())
+                    entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
+                    scholarship = st.selectbox("Scholarship Recipient", options=student_df['Scholarship_Recipient'].unique())
+                
+                course_name = st.selectbox("Course Name", options=student_df['Course_Name'].unique())
+                department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
+                st.info(f"Selected Department: **{department}**")
+
+                # We add dummy values for these as they are part of the model but not primary inputs for a hypothetical student
+                avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
+                final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0)
+
+                submitted = st.form_submit_button("🔮 Predict Risk & Get Recommendations")
+
+            if submitted:
                 model_features = model.feature_names_in_
-                input_data = student_data[model_features]
+                # Create a single-row DataFrame for prediction and recommendations
+                input_data = pd.DataFrame({
+                    'Age': [age], 'City_Tier': [city_tier], 'State': [state],
+                    '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc],
+                    'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name],
+                    'Department': [department], 'Fee_Payment_Status': [fee_status],
+                    'Scholarship_Recipient': [scholarship],
+                    'Extracurricular_Activity_Count': [extracurricular_count],
+                    'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]
+                })
+                input_data = input_data[model_features]
+
                 prediction_proba = model.predict_proba(input_data)[0][1]
                 risk_score = prediction_proba * 100
 
+                st.markdown("---")
+                st.subheader("Results")
+                
                 st.write("#### Risk Assessment")
                 if risk_score > 60:
                     st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
@@ -147,30 +209,27 @@ if uploaded_file is not None:
                 else:
                     st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
 
-                # Get and display recommendations
+                # --- INTEGRATED RECOMMENDATIONS ---
                 st.write("#### Recommended Interventions")
-                recommendations = get_recommendations(student_data, model)
+                recommendations = get_recommendations(input_data)
                 for rec in recommendations:
                     st.markdown(f"- {rec}")
 
         elif page == "Financial 'What-If' Simulator":
             st.header("💰 Financial 'What-If' Simulator")
+            # ... (Code for this page remains the same)
             st.markdown("Model the financial impact of your intervention strategies.")
-
             st.subheader("1. Set Your Baseline Assumptions")
             col1, col2 = st.columns(2)
             with col1:
                 avg_fee = st.number_input("Average Annual Fee per Student (₹)", min_value=10000, value=150000, step=5000)
             with col2:
-                # Calculate current predicted dropouts
                 model_features = model.feature_names_in_
                 predictions = model.predict(student_df[model_features])
                 num_at_risk = np.sum(predictions)
                 st.metric("Predicted Dropouts This Year", value=f"{num_at_risk}")
-
             current_revenue_loss = num_at_risk * avg_fee
             st.error(f"**Current Expected Annual Revenue Loss: ₹{current_revenue_loss:,.2f}**")
-
             st.markdown("---")
             st.subheader("2. Design Your Intervention Program")
             col1, col2 = st.columns(2)
@@ -178,17 +237,13 @@ if uploaded_file is not None:
                 intervention_cost = st.number_input("Total Cost of Intervention Program (₹)", min_value=0, value=500000, step=25000)
             with col2:
                 retention_improvement = st.slider("Expected Improvement in Retention (%)", min_value=0, max_value=100, value=20, step=1)
-
-            # Calculate the impact
             students_retained = int(num_at_risk * (retention_improvement / 100))
             revenue_saved = students_retained * avg_fee
             net_impact = revenue_saved - intervention_cost
             roi = (net_impact / intervention_cost) * 100 if intervention_cost > 0 else 0
-
             st.markdown("---")
             st.subheader("3. See the Financial Projection")
             st.success(f"**Projected Revenue Saved: ₹{revenue_saved:,.2f}** (by retaining {students_retained} students)")
-            
             if net_impact >= 0:
                 st.success(f"**Projected Net Financial Impact: +₹{net_impact:,.2f}**")
                 st.success(f"**Return on Investment (ROI): {roi:.2f}%**")
@@ -214,4 +269,3 @@ else:
     st.title("🎓 Welcome to Edu-Leap")
     st.info("Please upload a student data CSV file using the sidebar to begin analysis.")
     st.image("https://i.imgur.com/2w4sS2A.png", caption="Upload your data to get started.")
-
