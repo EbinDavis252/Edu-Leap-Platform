@@ -8,7 +8,7 @@ import os
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Edu-Leap Attrition Prediction",
-    page_icon="�",
+    page_icon="🎓",
     layout="wide"
 )
 
@@ -187,4 +187,3 @@ if db_ready:
                 file_name=f"at_risk_report_{risk_threshold}.csv",
                 mime="text/csv",
             )
-�
