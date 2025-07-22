@@ -11,15 +11,19 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- MOCK USER DATABASE ---
-# In a real-world app, this would be a secure, hashed database.
-MOCK_USERS = {
-    "admin": "admin123",
-    "guest": "guest"
-}
-
 # --- File Paths & Constants ---
 MODEL_PATH = 'attrition_model.joblib'
+
+# --- Initialize Session State ---
+# This is where we will store login status, username, and our user database for the session.
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+if 'users' not in st.session_state:
+    # Pre-populate with default users. In a real app, this would come from a secure database.
+    st.session_state['users'] = {
+        "admin": "admin123",
+        "guest": "guest"
+    }
 
 # --- Data and Model Loading Functions (Cached) ---
 
@@ -30,7 +34,6 @@ def load_model():
         model = joblib.load(MODEL_PATH)
         return model
     except FileNotFoundError:
-        # This error is critical, so we show it regardless of login status.
         st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please ensure it is in the GitHub repository.")
         return None
 
@@ -65,9 +68,11 @@ def get_recommendations(student_data):
         recommendations.append("✅ **Monitor Standard Progress:** No immediate high-risk factors detected based on primary rules. Continue standard monitoring.")
     return recommendations
 
-# --- LOGIN FUNCTION ---
+# --- Authentication Functions ---
+
 def check_login(username, password):
-    if username in MOCK_USERS and MOCK_USERS[username] == password:
+    """Checks user credentials against the session state user database."""
+    if username in st.session_state['users'] and st.session_state['users'][username] == password:
         st.session_state['logged_in'] = True
         st.session_state['username'] = username
         st.success("Logged in successfully!")
@@ -75,32 +80,49 @@ def check_login(username, password):
     else:
         st.error("Incorrect username or password")
 
-# --- LOGOUT FUNCTION ---
+def register_user(username, password):
+    """Registers a new user."""
+    if not username or not password:
+        st.warning("Username and password cannot be empty.")
+        return
+    if username in st.session_state['users']:
+        st.error("Username already exists. Please choose another one.")
+    else:
+        st.session_state['users'][username] = password
+        st.success("Registration successful! You can now log in with your new credentials.")
+
 def logout():
+    """Logs the user out."""
     st.session_state['logged_in'] = False
     st.session_state.pop('username', None)
     st.experimental_rerun()
 
 # --- Main Application Logic ---
 
-# Initialize session state for login
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
-
-# --- LOGIN SCREEN ---
+# --- LOGIN / REGISTRATION SCREEN ---
 if not st.session_state['logged_in']:
     st.title("🎓 Welcome to Edu-Leap")
-    st.header("Login")
     
-    with st.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        
-        if submitted:
-            check_login(username, password)
-            
-    st.info("Use `admin`/`admin123` or `guest`/`guest` to log in.")
+    login_tab, register_tab = st.tabs(["Login", "Register"])
+
+    with login_tab:
+        st.header("Login")
+        with st.form("login_form"):
+            username = st.text_input("Username", key="login_username")
+            password = st.text_input("Password", type="password", key="login_password")
+            submitted = st.form_submit_button("Login")
+            if submitted:
+                check_login(username, password)
+        st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
+
+    with register_tab:
+        st.header("Register New User")
+        with st.form("register_form"):
+            new_username = st.text_input("Choose a Username", key="reg_username")
+            new_password = st.text_input("Choose a Password", type="password", key="reg_password")
+            register_submitted = st.form_submit_button("Register")
+            if register_submitted:
+                register_user(new_username, new_password)
 
 # --- MAIN APP (if logged in) ---
 else:
