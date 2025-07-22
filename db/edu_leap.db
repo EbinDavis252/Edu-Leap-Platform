@@ -1,0 +1,86 @@
+import pandas as pd
+import sqlite3
+import os
+
+# --- Configuration ---
+CSV_FILE_PATH = 'student_master_data.csv'
+DB_FILE_PATH = 'edu_leap.db'
+TABLE_NAME = 'students'
+
+def setup_database():
+    """
+    Reads data from a CSV file and loads it into a new SQLite database.
+    """
+    # --- Step 1: Check if the CSV file exists ---
+    if not os.path.exists(CSV_FILE_PATH):
+        print(f"Error: The file '{CSV_FILE_PATH}' was not found.")
+        print("Please make sure the CSV file is in the same directory as this script.")
+        return
+
+    print(f"Reading data from '{CSV_FILE_PATH}'...")
+    try:
+        # --- Step 2: Read the CSV data using Pandas ---
+        df = pd.read_csv(CSV_FILE_PATH)
+        # A small data cleaning step: replace spaces in column names with underscores
+        df.columns = df.columns.str.replace(' ', '_')
+        print(f"Successfully read {len(df)} records from the CSV file.")
+
+    except Exception as e:
+        print(f"An error occurred while reading the CSV file: {e}")
+        return
+
+    try:
+        # --- Step 3: Connect to the SQLite database ---
+        # This will create the database file if it doesn't exist.
+        print(f"Connecting to database '{DB_FILE_PATH}'...")
+        conn = sqlite3.connect(DB_FILE_PATH)
+        
+        # --- Step 4: Load the DataFrame into the SQL table ---
+        # The df.to_sql() function is powerful. It automatically:
+        # 1. Creates a table with the correct data types.
+        # 2. Inserts all the data from the DataFrame.
+        # 'if_exists='replace'' means it will drop the table first if it already exists.
+        # This is useful for re-running the script without errors.
+        print(f"Creating table '{TABLE_NAME}' and loading data...")
+        df.to_sql(TABLE_NAME, conn, if_exists='replace', index=False)
+        print("Data loaded successfully!")
+
+    except sqlite3.Error as e:
+        print(f"A database error occurred: {e}")
+        return
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return
+
+    finally:
+        # --- Step 5: Verification and Cleanup ---
+        if 'conn' in locals() and conn:
+            print("\n--- Verification ---")
+            cursor = conn.cursor()
+            
+            # Query 1: Count the total number of rows in the new table
+            cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME}")
+            row_count = cursor.fetchone()[0]
+            print(f"Number of rows in '{TABLE_NAME}' table: {row_count}")
+            
+            # Query 2: Fetch and display the first 5 rows from the table
+            print("\nFirst 5 rows from the database:")
+            cursor.execute(f"SELECT * FROM {TABLE_NAME} LIMIT 5")
+            rows = cursor.fetchall()
+            # Get column names from the cursor description
+            col_names = [description[0] for description in cursor.description]
+            # Print header
+            print(f"{' | '.join(col_names)}")
+            # Print rows
+            for row in rows:
+                print(row)
+
+            # Close the connection
+            conn.close()
+            print("\nDatabase connection closed.")
+
+
+# --- Run the setup process ---
+if __name__ == '__main__':
+    setup_database()
+
