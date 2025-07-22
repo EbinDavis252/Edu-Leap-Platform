@@ -204,7 +204,6 @@ else:
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
                     
-                    # --- STABLE SHAP VALUE HANDLING & VISUALIZATION ---
                     shap_values = shap_explainer.shap_values(input_data_transformed)
                     
                     if isinstance(shap_values, list) and len(shap_values) > 1:
@@ -212,16 +211,17 @@ else:
                     else:
                         shap_values_for_plot = shap_values
 
-                    # Create a DataFrame for the SHAP values
+                    # --- DEFINITIVE FIX FOR VALUE ERROR ---
+                    # The shap_values_for_plot is a 1D array for a single prediction.
+                    # We must wrap it in a list to make it 2D for the DataFrame constructor.
                     shap_df = pd.DataFrame(
-                        shap_values_for_plot,
+                        [shap_values_for_plot.flatten()], # Flatten to be safe and wrap in a list
                         columns=model_features
                     ).T.reset_index()
                     shap_df.columns = ['Feature', 'SHAP_Value']
                     shap_df['Color'] = ['red' if val > 0 else 'blue' for val in shap_df['SHAP_Value']]
                     shap_df = shap_df.sort_values(by='SHAP_Value', ascending=False)
                     
-                    # Create and display the bar chart
                     fig, ax = plt.subplots()
                     ax.barh(shap_df['Feature'], shap_df['SHAP_Value'], color=shap_df['Color'])
                     ax.set_xlabel("SHAP Value (Impact on Dropout Risk)")
