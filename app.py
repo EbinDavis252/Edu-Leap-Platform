@@ -17,37 +17,31 @@ MODEL_PATH = 'attrition_model.joblib'
 DB_PATH = 'edu_leap.db'
 CSV_PATH = 'student_master_data.csv'
 
-# --- THE NEW, FOOLPROOF DATABASE INITIALIZATION ---
+# --- Caching Functions (No UI elements inside) ---
+
 @st.cache_resource
 def initialize_database():
     """
-    Initializes the database. If the DB file doesn't exist, it creates it
-    from the CSV file. This function runs only once.
+    Initializes and returns a database connection object.
+    Creates the DB from CSV if it doesn't exist.
+    Returns None on failure.
     """
-    if not os.path.exists(DB_PATH):
-        st.toast("Database not found. Creating a new one from CSV...", icon="⚙️")
-        try:
-            # Read the source data
+    try:
+        if not os.path.exists(DB_PATH):
             df = pd.read_csv(CSV_PATH)
-            
-            # Connect to a new SQLite database
             conn = sqlite3.connect(DB_PATH)
-            
-            # Use df.to_sql to create the 'students' table and load data
             df.to_sql('students', conn, if_exists='replace', index=False)
-            
-            # Close the connection
             conn.close()
-            st.toast("Database created successfully!", icon="✅")
-        except FileNotFoundError:
-            st.error(f"Fatal Error: The source data file '{CSV_PATH}' was not found. Please upload it to the GitHub repository.")
-            return False
-        except Exception as e:
-            st.error(f"An error occurred during database creation: {e}")
-            return False
-    return True
+        
+        # Return a connection object for the app to use
+        return sqlite3.connect(DB_PATH)
 
-# --- Load Model and Data ---
+    except FileNotFoundError:
+        return "CSV_NOT_FOUND" # Return a specific error code
+    except Exception as e:
+        # For other exceptions, we can return the error message
+        return str(e)
+
 @st.cache_resource
 def load_model():
     """Loads the trained machine learning model from file."""
@@ -55,44 +49,53 @@ def load_model():
         model = joblib.load(MODEL_PATH)
         return model
     except FileNotFoundError:
-        st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please upload it.")
         return None
-
-@st.cache_data
-def load_data_from_db():
-    """Connects to the SQLite DB and loads the full student dataset."""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM students", conn)
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"Error connecting to the database: {e}")
-        return pd.DataFrame()
 
 # --- Main Application Logic ---
 
-# Run initialization first
-db_ready = initialize_database()
+# Initialize database and model
+db_connection = initialize_database()
+model = load_model()
 
-if db_ready:
-    model = load_model()
-    student_df = load_data_from_db()
+# --- Handle Initialization Errors Gracefully ---
 
-    if model is not None and not student_df.empty:
+if isinstance(db_connection, str):
+    if db_connection == "CSV_NOT_FOUND":
+        st.error(f"Fatal Error: The source data file '{CSV_PATH}' was not found. Please upload it to your GitHub repository.")
+    else:
+        st.error(f"An unexpected error occurred during database creation: {db_connection}")
+elif db_connection is None:
+    st.error("Failed to connect to the database.")
+elif model is None:
+    st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please upload it to your GitHub repository.")
+else:
+    # --- If all successful, run the main app ---
+    st.toast("App initialized successfully!", icon="🚀")
+    
+    # Load data using the established connection
+    try:
+        student_df = pd.read_sql_query("SELECT * FROM students", db_connection)
+        db_connection.close() # Close connection after loading data
+    except Exception as e:
+        student_df = pd.DataFrame()
+        st.error(f"Failed to read data from the database: {e}")
+
+    if not student_df.empty:
         st.title("🎓 Edu-Leap: AI-Powered Student Attrition Platform")
         st.markdown("This platform uses machine learning to predict student dropout risk and provide actionable insights for administrators.")
 
-        # --- Sidebar for Navigation ---
+        # Sidebar for Navigation
         st.sidebar.title("Navigation")
         page = st.sidebar.radio("Go to", ["Dashboard Overview", "Single Student Prediction", "At-Risk Students Report"])
 
-        # --- Page 1: Dashboard Overview ---
+        # Page 1: Dashboard Overview
         if page == "Dashboard Overview":
             st.header("Institutional Health Dashboard")
             
             total_students = len(student_df)
-            predictions = model.predict(student_df.drop(columns=['StudentID', 'Is_Dropout']))
+            # Ensure columns used for prediction are present
+            model_features = model.feature_names_in_
+            predictions = model.predict(student_df[model_features])
             num_at_risk = np.sum(predictions)
             attrition_rate = (num_at_risk / total_students) * 100 if total_students > 0 else 0
 
@@ -110,7 +113,7 @@ if db_ready:
             
             st.bar_chart(at_risk_by_dept)
 
-        # --- Page 2: Single Student Prediction ---
+        # Page 2: Single Student Prediction
         elif page == "Single Student Prediction":
             st.header("Predict Attrition for a Single Student")
             st.markdown("Enter the student's details below to get a risk prediction.")
@@ -139,7 +142,7 @@ if db_ready:
                 submitted = st.form_submit_button("🔮 Predict Risk")
 
             if submitted:
-                input_features = student_df.drop(columns=['StudentID', 'Is_Dropout']).columns
+                input_features = model.feature_names_in_
                 input_data = pd.DataFrame({
                     'Age': [age], 'City_Tier': [city_tier], 'State': [state],
                     '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc],
@@ -161,11 +164,12 @@ if db_ready:
                 else:
                     st.success(f"Low Risk: There is a {risk_score:.2f}% probability this student will drop out.", icon="✅")
 
-        # --- Page 3: At-Risk Students Report ---
+        # Page 3: At-Risk Students Report
         elif page == "At-Risk Students Report":
             st.header("Report of At-Risk Students")
             
-            risk_probabilities = model.predict_proba(student_df.drop(columns=['StudentID', 'Is_Dropout']))[:, 1]
+            model_features = model.feature_names_in_
+            risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
             report_df = student_df.copy()
             report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
             
@@ -187,3 +191,4 @@ if db_ready:
                 file_name=f"at_risk_report_{risk_threshold}.csv",
                 mime="text/csv",
             )
+
