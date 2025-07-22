@@ -4,6 +4,7 @@ import numpy as np
 import joblib
 import io
 import shap
+import matplotlib
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -17,17 +18,14 @@ if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'users' not in st.session_state:
     st.session_state['users'] = {"admin": "admin123", "guest": "guest"}
-# Add a new state to store notes for students
 if 'student_notes' not in st.session_state:
     st.session_state['student_notes'] = {}
 
-# --- File Paths & Constants ---
+# --- File Paths ---
 MODEL_PATH = 'attrition_model.joblib'
-# We assume a SHAP explainer has been pre-calculated and saved.
-# I will provide the script to generate this file.
-SHAP_EXPLAINER_PATH = 'shap_explainer.joblib' 
+SHAP_EXPLAINER_PATH = 'shap_explainer.joblib'
 
-# --- Data and Model Loading Functions (Cached) ---
+# --- Data and Model Loading ---
 
 @st.cache_resource
 def load_model_and_explainer():
@@ -37,7 +35,7 @@ def load_model_and_explainer():
         explainer = joblib.load(SHAP_EXPLAINER_PATH)
         return model, explainer
     except FileNotFoundError:
-        st.error(f"Fatal Error: Model or SHAP explainer file not found. Please ensure '{MODEL_PATH}' and '{SHAP_EXPLAINER_PATH}' are in the GitHub repository.")
+        st.error(f"Fatal Error: A required file was not found. Please ensure '{MODEL_PATH}' and '{SHAP_EXPLAINER_PATH}' are in the GitHub repository.")
         return None, None
 
 @st.cache_data
@@ -79,13 +77,12 @@ def logout():
     st.session_state.pop('username', None)
     st.rerun()
 
-# This function is needed to render the SHAP plot in Streamlit
-@st.cache_data
 def st_shap(plot, height=None):
+    """Renders a SHAP plot in Streamlit."""
     shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
     st.components.v1.html(shap_html, height=height)
 
-# --- Main Application Logic ---
+# --- Main Application ---
 
 if not st.session_state['logged_in']:
     st.title("🎓 Welcome to Edu-Leap")
@@ -128,63 +125,93 @@ else:
             ])
 
             if page == "Risk Prediction & Recommendations":
-                st.header("🔍 Advanced Risk Prediction with SHAP Explanations")
-                st.markdown("Select a student to see their risk score and the key factors driving the prediction.")
+                st.header("🔍 Manual Risk Prediction & AI Recommendations")
+                st.markdown("Enter a student's details manually to assess their dropout risk and receive tailored intervention strategies.")
                 
-                student_id_to_check = st.selectbox("Select Student ID", options=student_df['StudentID'].unique())
-                if student_id_to_check:
-                    student_data = student_df[student_df['StudentID'] == student_id_to_check]
-                    st.write("#### Student Profile")
-                    st.write(student_data[['Course_Name', 'Final_CGPA', 'Avg_Attendance', 'Fee_Payment_Status']])
+                with st.form("prediction_form"):
+                    st.subheader("Student Details")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        age = st.number_input("Age", 17, 25, 20)
+                        tenth_perc = st.number_input("10th Percentage", 0.0, 100.0, 85.0, format="%.2f")
+                        extracurricular_count = st.slider("Number of Extracurricular Activities", 0, 10, 2)
+                    with col2:
+                        city_tier = st.selectbox("City Tier", options=student_df['City_Tier'].unique())
+                        twelfth_perc = st.number_input("12th Percentage", 0.0, 100.0, 80.0, format="%.2f")
+                        fee_status = st.selectbox("Fee Payment Status", options=student_df['Fee_Payment_Status'].unique())
+                    with col3:
+                        state = st.selectbox("State", options=student_df['State'].unique())
+                        entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
+                        scholarship = st.selectbox("Scholarship Recipient", options=student_df['Scholarship_Recipient'].unique())
+                    
+                    course_name = st.selectbox("Course Name", options=student_df['Course_Name'].unique())
+                    department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
+                    st.info(f"Selected Department: **{department}**")
+                    
+                    avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
+                    final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0)
+                    
+                    submitted = st.form_submit_button("🔮 Predict Risk & Get Recommendations")
 
+                if submitted:
                     model_features = model.feature_names_in_
-                    input_data_df = student_data[model_features]
-                    
-                    # Pre-process the data for SHAP (using the model's preprocessor)
-                    preprocessor = model.named_steps['preprocessor']
-                    input_data_transformed = preprocessor.transform(input_data_df)
-                    
+                    input_data_df = pd.DataFrame({
+                        'Age': [age], 'City_Tier': [city_tier], 'State': [state],
+                        '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc],
+                        'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name],
+                        'Department': [department], 'Fee_Payment_Status': [fee_status],
+                        'Scholarship_Recipient': [scholarship],
+                        'Extracurricular_Activity_Count': [extracurricular_count],
+                        'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]
+                    })
+                    input_data_df = input_data_df[model_features]
+
                     prediction_proba = model.predict_proba(input_data_df)[0][1]
                     risk_score = prediction_proba * 100
 
-                    st.write("#### Risk Assessment")
-                    if risk_score > 60:
-                        st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
-                    elif risk_score > 30:
-                        st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
-                    else:
-                        st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
-
+                    st.markdown("---")
+                    st.subheader("Results")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("#### Risk Assessment")
+                        if risk_score > 60:
+                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
+                        elif risk_score > 30:
+                            st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
+                        else:
+                            st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
+                    
+                    with col2:
+                        st.write("#### Recommended Interventions")
+                        # Note: Recommendations are rule-based and don't use SHAP
+                        def get_recommendations(student_data):
+                            recommendations = []
+                            if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
+                                recommendations.append("🚨 **High Priority: Financial Counseling.**")
+                            elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
+                                recommendations.append("⚠️ **Financial Follow-up.**")
+                            if student_data['Avg_Attendance'].iloc[0] < 65:
+                                recommendations.append("📚 **Academic Mentorship.**")
+                            if student_data['Final_CGPA'].iloc[0] < 6.0:
+                                recommendations.append("📖 **Tutoring Services.**")
+                            if not recommendations:
+                                recommendations.append("✅ **Monitor Standard Progress.**")
+                            return recommendations
+                        recommendations = get_recommendations(input_data_df)
+                        for rec in recommendations:
+                            st.markdown(f"- {rec}")
+                    
+                    st.markdown("---")
                     st.write("#### Key Risk Factors (SHAP Analysis)")
                     st.markdown("This chart shows which features are pushing the prediction higher (red) or lower (blue).")
+                    
+                    preprocessor = model.named_steps['preprocessor']
+                    input_data_transformed = preprocessor.transform(input_data_df)
                     shap_values = shap_explainer.shap_values(input_data_transformed)
+                    
                     st_shap(shap.force_plot(shap_explainer.expected_value, shap_values[0,:], input_data_df.iloc[0,:]))
 
-            elif page == "At-Risk Students Report & Actions":
-                st.header("📝 At-Risk Students Report & Action Tracker")
-                model_features = model.feature_names_in_
-                risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
-                report_df = student_df.copy()
-                report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
-                
-                risk_threshold = st.slider("Select Risk Threshold (%)", 0, 100, 60)
-                at_risk_students = report_df[report_df['Risk_Probability_%'] > risk_threshold].sort_values(by='Risk_Probability_%', ascending=False)
-                st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
-
-                for index, row in at_risk_students.iterrows():
-                    student_id = row['StudentID']
-                    with st.expander(f"**ID: {student_id}** | Course: {row['Course_Name']} | Risk: {row['Risk_Probability_%']:.2f}%"):
-                        st.write(f"**Key Details:** CGPA: {row['Final_CGPA']}, Attendance: {row['Avg_Attendance']}%")
-                        
-                        # Note-taking and tracking area
-                        note_key = f"note_{student_id}"
-                        current_note = st.session_state['student_notes'].get(student_id, "")
-                        note_text = st.text_area("Add or Edit Note:", value=current_note, key=note_key)
-                        
-                        if st.button("Save Note", key=f"save_{student_id}"):
-                            st.session_state['student_notes'][student_id] = note_text
-                            st.success(f"Note saved for student {student_id}.")
-            
             # Other pages remain the same
             elif page == "Dashboard Overview":
                 st.header("Institutional Health Dashboard")
@@ -260,6 +287,25 @@ else:
                     st.error(f"**Projected Net Financial Impact: -₹{abs(net_impact):,.2f}**")
                     st.error(f"**Return on Investment (ROI): {roi:.2f}%**")
 
+            elif page == "At-Risk Students Report & Actions":
+                st.header("📝 At-Risk Students Report & Action Tracker")
+                model_features = model.feature_names_in_
+                risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
+                report_df = student_df.copy()
+                report_df['Risk_Probability_%'] = (risk_probabilities * 100).round(2)
+                risk_threshold = st.slider("Select Risk Threshold (%)", 0, 100, 60)
+                at_risk_students = report_df[report_df['Risk_Probability_%'] > risk_threshold].sort_values(by='Risk_Probability_%', ascending=False)
+                st.write(f"Found {len(at_risk_students)} students above the {risk_threshold}% risk threshold.")
+                for index, row in at_risk_students.iterrows():
+                    student_id = row['StudentID']
+                    with st.expander(f"**ID: {student_id}** | Course: {row['Course_Name']} | Risk: {row['Risk_Probability_%']:.2f}%"):
+                        st.write(f"**Key Details:** CGPA: {row['Final_CGPA']}, Attendance: {row['Avg_Attendance']}%")
+                        note_key = f"note_{student_id}"
+                        current_note = st.session_state['student_notes'].get(student_id, "")
+                        note_text = st.text_area("Add or Edit Note:", value=current_note, key=note_key)
+                        if st.button("Save Note", key=f"save_{student_id}"):
+                            st.session_state['student_notes'][student_id] = note_text
+                            st.success(f"Note saved for student {student_id}.")
     else:
         st.info("Awaiting data file. Please upload a CSV to activate the dashboards.")
 
