@@ -119,7 +119,7 @@ else:
             page = st.sidebar.radio("Go to", [
                 "Dashboard Overview", 
                 "Historical Trends", 
-                "Risk Prediction & Recommendations", 
+                "Risk Prediction", 
                 "Financial 'What-If' Simulator",
                 "At-Risk Students Report & Actions"
             ])
