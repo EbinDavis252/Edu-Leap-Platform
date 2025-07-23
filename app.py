@@ -21,16 +21,16 @@ st.markdown("""
         100% { background-position: 0% 50%; }
     }
 
-    /* Main app and sidebar background with a new, professional animated gradient */
+    /* Main app and sidebar background with a new, lighter animated gradient */
     .stApp, [data-testid="stSidebar"] > div:first-child {
-        background: linear-gradient(-45deg, #480ca8, #560bad, #7209b7, #3f37c9);
+        background: linear-gradient(-45deg, #89f7fe, #66a6ff, #89f7fe, #b388eb);
         background-size: 400% 400%;
         animation: gradient 15s ease infinite;
     }
 
-    /* Make the sidebar's inner content container transparent and add a border */
+    /* Make the sidebar's inner content container transparent and add a thicker border */
     [data-testid="stSidebar"] > div:first-child {
-        border-right: 2px solid rgba(255, 255, 255, 0.2);
+        border-right: 3px solid rgba(255, 255, 255, 0.3);
     }
     [data-testid="stSidebar"] > div:first-child > div:first-child {
         background-color: transparent;
@@ -72,13 +72,13 @@ st.markdown("""
     /* Buttons */
     .stButton>button {
         border-radius: 0.5rem;
-        background-color: #560bad; /* Matching violet color */
+        background-color: #66a6ff; /* Matching light blue color */
         color: white;
         border: none;
         padding: 10px 24px;
     }
     .stButton>button:hover {
-        background-color: #480ca8;
+        background-color: #5091e6;
         color: white;
     }
     
@@ -89,8 +89,8 @@ st.markdown("""
 
     /* Ensure text inside sidebar is readable on the gradient */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .st-emotion-cache-10trblm {
-        color: white;
-        text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+        color: #1E293B; /* Change sidebar text to dark for better contrast */
+        text-shadow: none; /* Remove text shadow as it's not needed for light background */
     }
 
 </style>
