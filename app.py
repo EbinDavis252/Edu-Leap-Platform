@@ -179,24 +179,6 @@ else:
                         st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                     else:
                         st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
-                    
-                    st.write("#### Recommended Interventions")
-                    def get_recommendations(student_data):
-                        recommendations = []
-                        if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
-                            recommendations.append("🚨 **High Priority: Financial Counseling.**")
-                        elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
-                            recommendations.append("⚠️ **Financial Follow-up.**")
-                        if student_data['Avg_Attendance'].iloc[0] < 65:
-                            recommendations.append("📚 **Academic Mentorship.**")
-                        if student_data['Final_CGPA'].iloc[0] < 6.0:
-                            recommendations.append("📖 **Tutoring Services.**")
-                        if not recommendations:
-                            recommendations.append("✅ **Monitor Standard Progress.**")
-                        return recommendations
-                    recommendations = get_recommendations(input_data_df)
-                    for rec in recommendations:
-                        st.markdown(f"- {rec}")
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
