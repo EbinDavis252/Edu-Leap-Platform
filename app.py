@@ -20,6 +20,9 @@ if 'users' not in st.session_state:
     st.session_state['users'] = {"admin": "admin123", "guest": "guest"}
 if 'student_notes' not in st.session_state:
     st.session_state['student_notes'] = {}
+# Add a flag for successful registration to improve UX
+if 'registration_success' not in st.session_state:
+    st.session_state['registration_success'] = False
 
 # --- File Paths ---
 MODEL_PATH = 'attrition_model.joblib'
@@ -70,7 +73,8 @@ def register_user(username, password):
         st.error("Username already exists.")
     else:
         st.session_state['users'][username] = password
-        st.success("Registration successful! Please log in.")
+        # Set the success flag to change the UI on the next rerun
+        st.session_state['registration_success'] = True
         st.rerun()
 
 def logout():
@@ -93,11 +97,19 @@ if not st.session_state['logged_in']:
         st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
     with register_tab:
         st.header("Register New User")
-        with st.form("register_form"):
-            new_username = st.text_input("Choose a Username", key="reg_user")
-            new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
-            if st.form_submit_button("Register"):
-                register_user(new_username, new_password)
+        # --- DEFINITIVE UX FIX FOR REGISTRATION ---
+        if st.session_state.get('registration_success'):
+            st.success("Registration successful! Please switch to the Login tab to continue.")
+            # Offer a button to reset if they want to register another user
+            if st.button("Register another user?"):
+                st.session_state['registration_success'] = False
+                st.rerun()
+        else:
+            with st.form("register_form"):
+                new_username = st.text_input("Choose a Username", key="reg_user")
+                new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
+                if st.form_submit_button("Register"):
+                    register_user(new_username, new_password)
 else:
     model, shap_explainer = load_model_and_explainer()
     if model is None or shap_explainer is None:
@@ -211,14 +223,10 @@ else:
                     else:
                         shap_values_for_plot = shap_values
                     
-                    # --- DEFINITIVE FIX FOR VALUE ERROR ---
-                    # Get the correct feature names AFTER one-hot encoding
                     feature_names_out = preprocessor.get_feature_names_out(model_features)
 
-                    # Create a Series for easy sorting and manipulation. This is the correct way.
                     shap_series = pd.Series(shap_values_for_plot.flatten(), index=feature_names_out)
                     
-                    # Get top positive (increasing risk) and negative (decreasing risk) factors
                     positive_factors = shap_series[shap_series > 0].sort_values(ascending=False).head(3)
                     negative_factors = shap_series[shap_series < 0].sort_values(ascending=True).head(3)
 
