@@ -108,7 +108,6 @@ else:
     uploaded_file = st.sidebar.file_uploader("Upload a CSV file with student data.", type="csv")
 
     if uploaded_file is not None:
-        # --- THIS IS THE CORRECTED LINE ---
         student_df = load_and_prepare_data(uploaded_file)
         if student_df is not None:
             st.title("🚀 Edu-Leap: AI Decision Platform")
@@ -212,10 +211,14 @@ else:
                     else:
                         shap_values_for_plot = shap_values
                     
+                    # --- DEFINITIVE FIX FOR VALUE ERROR ---
+                    # Get the correct feature names AFTER one-hot encoding
                     feature_names_out = preprocessor.get_feature_names_out(model_features)
 
+                    # Create a Series for easy sorting and manipulation. This is the correct way.
                     shap_series = pd.Series(shap_values_for_plot.flatten(), index=feature_names_out)
                     
+                    # Get top positive (increasing risk) and negative (decreasing risk) factors
                     positive_factors = shap_series[shap_series > 0].sort_values(ascending=False).head(3)
                     negative_factors = shap_series[shap_series < 0].sort_values(ascending=True).head(3)
 
