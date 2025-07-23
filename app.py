@@ -108,7 +108,7 @@ else:
     uploaded_file = st.sidebar.file_uploader("Upload a CSV file with student data.", type="csv")
 
     if uploaded_file is not None:
-        student_df = load_and_prepare_data(uploaded_file)
+        student_.df = load_and_prepare_data(uploaded_file)
         if student_df is not None:
             st.title("🚀 Edu-Leap: AI Decision Platform")
             st.sidebar.header("2. Navigate Dashboards")
@@ -198,36 +198,37 @@ else:
                             st.markdown(f"- {rec}")
                     
                     st.markdown("---")
-                    st.write("#### Key Risk Factors (SHAP Analysis)")
-                    st.markdown("This chart shows the impact of each feature on the dropout prediction. Red bars increase risk, blue bars decrease it.")
+                    st.write("#### Key Risk Factors (AI Analysis)")
+                    st.markdown("This table shows the top factors influencing the prediction.")
                     
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
                     
+                    # --- STABLE SHAP VALUE ANALYSIS ---
                     shap_values = shap_explainer.shap_values(input_data_transformed)
                     
                     if isinstance(shap_values, list) and len(shap_values) > 1:
                         shap_values_for_plot = shap_values[1]
                     else:
                         shap_values_for_plot = shap_values
-
-                    # --- DEFINITIVE FIX FOR VALUE ERROR ---
-                    # The shap_values_for_plot is a 1D array for a single prediction.
-                    # We must wrap it in a list to make it 2D for the DataFrame constructor.
-                    shap_df = pd.DataFrame(
-                        [shap_values_for_plot.flatten()], # Flatten to be safe and wrap in a list
-                        columns=model_features
-                    ).T.reset_index()
-                    shap_df.columns = ['Feature', 'SHAP_Value']
-                    shap_df['Color'] = ['red' if val > 0 else 'blue' for val in shap_df['SHAP_Value']]
-                    shap_df = shap_df.sort_values(by='SHAP_Value', ascending=False)
                     
-                    fig, ax = plt.subplots()
-                    ax.barh(shap_df['Feature'], shap_df['SHAP_Value'], color=shap_df['Color'])
-                    ax.set_xlabel("SHAP Value (Impact on Dropout Risk)")
-                    ax.set_title("Feature Impact on Prediction")
-                    ax.axvline(0, color='grey', linewidth=0.8)
-                    st.pyplot(fig)
+                    # Get the correct feature names AFTER one-hot encoding
+                    feature_names_out = preprocessor.get_feature_names_out(model_features)
+
+                    # Create a Series for easy sorting and manipulation
+                    shap_series = pd.Series(shap_values_for_plot.flatten(), index=feature_names_out)
+                    
+                    # Get top positive (increasing risk) and negative (decreasing risk) factors
+                    positive_factors = shap_series[shap_series > 0].sort_values(ascending=False).head(3)
+                    negative_factors = shap_series[shap_series < 0].sort_values(ascending=True).head(3)
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write("🔴 **Factors Increasing Dropout Risk:**")
+                        st.table(positive_factors)
+                    with col2:
+                        st.write("🔵 **Factors Decreasing Dropout Risk:**")
+                        st.table(negative_factors)
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
