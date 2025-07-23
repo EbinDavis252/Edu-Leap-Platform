@@ -3,8 +3,6 @@ import pandas as pd
 import numpy as np
 import joblib
 import io
-import shap
-import matplotlib.pyplot as plt
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -20,26 +18,23 @@ if 'users' not in st.session_state:
     st.session_state['users'] = {"admin": "admin123", "guest": "guest"}
 if 'student_notes' not in st.session_state:
     st.session_state['student_notes'] = {}
-# Add a flag for successful registration to improve UX
 if 'registration_success' not in st.session_state:
     st.session_state['registration_success'] = False
 
 # --- File Paths ---
 MODEL_PATH = 'attrition_model.joblib'
-SHAP_EXPLAINER_PATH = 'shap_explainer.joblib'
 
 # --- Data and Model Loading ---
 
 @st.cache_resource
-def load_model_and_explainer():
-    """Loads the ML model and the SHAP explainer."""
+def load_model():
+    """Loads the ML model."""
     try:
         model = joblib.load(MODEL_PATH)
-        explainer = joblib.load(SHAP_EXPLAINER_PATH)
-        return model, explainer
+        return model
     except FileNotFoundError:
-        st.error(f"Fatal Error: A required file was not found. Please ensure '{MODEL_PATH}' and '{SHAP_EXPLAINER_PATH}' are in the GitHub repository.")
-        return None, None
+        st.error(f"Fatal Error: Model file '{MODEL_PATH}' not found. Please ensure it is in the GitHub repository.")
+        return None
 
 @st.cache_data
 def load_and_prepare_data(uploaded_file):
@@ -73,7 +68,6 @@ def register_user(username, password):
         st.error("Username already exists.")
     else:
         st.session_state['users'][username] = password
-        # Set the success flag to change the UI on the next rerun
         st.session_state['registration_success'] = True
         st.rerun()
 
@@ -97,10 +91,8 @@ if not st.session_state['logged_in']:
         st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
     with register_tab:
         st.header("Register New User")
-        # --- DEFINITIVE UX FIX FOR REGISTRATION ---
         if st.session_state.get('registration_success'):
             st.success("Registration successful! Please switch to the Login tab to continue.")
-            # Offer a button to reset if they want to register another user
             if st.button("Register another user?"):
                 st.session_state['registration_success'] = False
                 st.rerun()
@@ -111,8 +103,8 @@ if not st.session_state['logged_in']:
                 if st.form_submit_button("Register"):
                     register_user(new_username, new_password)
 else:
-    model, shap_explainer = load_model_and_explainer()
-    if model is None or shap_explainer is None:
+    model = load_model()
+    if model is None:
         st.stop()
     
     st.sidebar.title(f"Welcome, {st.session_state['username']}!")
@@ -133,7 +125,7 @@ else:
             ])
 
             if page == "Risk Prediction & Recommendations":
-                st.header("🔍 Manual Risk Prediction & AI Recommendations")
+                st.header("🔍 Manual Risk Prediction & Recommendations")
                 st.markdown("Enter a student's details manually to assess their dropout risk and receive tailored intervention strategies.")
                 
                 with st.form("prediction_form"):
@@ -180,63 +172,31 @@ else:
                     st.markdown("---")
                     st.subheader("Results")
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("#### Risk Assessment")
-                        if risk_score > 60:
-                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
-                        elif risk_score > 30:
-                            st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
-                        else:
-                            st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
-                    
-                    with col2:
-                        st.write("#### Recommended Interventions")
-                        def get_recommendations(student_data):
-                            recommendations = []
-                            if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
-                                recommendations.append("🚨 **High Priority: Financial Counseling.**")
-                            elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
-                                recommendations.append("⚠️ **Financial Follow-up.**")
-                            if student_data['Avg_Attendance'].iloc[0] < 65:
-                                recommendations.append("📚 **Academic Mentorship.**")
-                            if student_data['Final_CGPA'].iloc[0] < 6.0:
-                                recommendations.append("📖 **Tutoring Services.**")
-                            if not recommendations:
-                                recommendations.append("✅ **Monitor Standard Progress.**")
-                            return recommendations
-                        recommendations = get_recommendations(input_data_df)
-                        for rec in recommendations:
-                            st.markdown(f"- {rec}")
-                    
-                    st.markdown("---")
-                    st.write("#### Key Risk Factors (AI Analysis)")
-                    st.markdown("This table shows the top factors influencing the prediction.")
-                    
-                    preprocessor = model.named_steps['preprocessor']
-                    input_data_transformed = preprocessor.transform(input_data_df)
-                    
-                    shap_values = shap_explainer.shap_values(input_data_transformed)
-                    
-                    if isinstance(shap_values, list) and len(shap_values) > 1:
-                        shap_values_for_plot = shap_values[1]
+                    st.write("#### Risk Assessment")
+                    if risk_score > 60:
+                        st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
+                    elif risk_score > 30:
+                        st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                     else:
-                        shap_values_for_plot = shap_values
+                        st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
                     
-                    feature_names_out = preprocessor.get_feature_names_out(model_features)
-
-                    shap_series = pd.Series(shap_values_for_plot.flatten(), index=feature_names_out)
-                    
-                    positive_factors = shap_series[shap_series > 0].sort_values(ascending=False).head(3)
-                    negative_factors = shap_series[shap_series < 0].sort_values(ascending=True).head(3)
-
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("🔴 **Factors Increasing Dropout Risk:**")
-                        st.table(positive_factors)
-                    with col2:
-                        st.write("🔵 **Factors Decreasing Dropout Risk:**")
-                        st.table(negative_factors)
+                    st.write("#### Recommended Interventions")
+                    def get_recommendations(student_data):
+                        recommendations = []
+                        if student_data['Fee_Payment_Status'].iloc[0] == 'Defaulted':
+                            recommendations.append("🚨 **High Priority: Financial Counseling.**")
+                        elif student_data['Fee_Payment_Status'].iloc[0] == 'Delayed':
+                            recommendations.append("⚠️ **Financial Follow-up.**")
+                        if student_data['Avg_Attendance'].iloc[0] < 65:
+                            recommendations.append("📚 **Academic Mentorship.**")
+                        if student_data['Final_CGPA'].iloc[0] < 6.0:
+                            recommendations.append("📖 **Tutoring Services.**")
+                        if not recommendations:
+                            recommendations.append("✅ **Monitor Standard Progress.**")
+                        return recommendations
+                    recommendations = get_recommendations(input_data_df)
+                    for rec in recommendations:
+                        st.markdown(f"- {rec}")
 
             # Other pages remain the same
             elif page == "Dashboard Overview":
