@@ -151,7 +151,7 @@ else:
                     avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
                     final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0)
                     
-                    submitted = st.form_submit_button("🔮 Predict Risk & Get Recommendations")
+                    submitted = st.form_submit_button("🔮 Predict Risk")
 
                 if submitted:
                     model_features = model.feature_names_in_
