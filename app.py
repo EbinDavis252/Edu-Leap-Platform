@@ -108,7 +108,8 @@ else:
     uploaded_file = st.sidebar.file_uploader("Upload a CSV file with student data.", type="csv")
 
     if uploaded_file is not None:
-        student_.df = load_and_prepare_data(uploaded_file)
+        # --- THIS IS THE CORRECTED LINE ---
+        student_df = load_and_prepare_data(uploaded_file)
         if student_df is not None:
             st.title("🚀 Edu-Leap: AI Decision Platform")
             st.sidebar.header("2. Navigate Dashboards")
@@ -204,7 +205,6 @@ else:
                     preprocessor = model.named_steps['preprocessor']
                     input_data_transformed = preprocessor.transform(input_data_df)
                     
-                    # --- STABLE SHAP VALUE ANALYSIS ---
                     shap_values = shap_explainer.shap_values(input_data_transformed)
                     
                     if isinstance(shap_values, list) and len(shap_values) > 1:
@@ -212,13 +212,10 @@ else:
                     else:
                         shap_values_for_plot = shap_values
                     
-                    # Get the correct feature names AFTER one-hot encoding
                     feature_names_out = preprocessor.get_feature_names_out(model_features)
 
-                    # Create a Series for easy sorting and manipulation
                     shap_series = pd.Series(shap_values_for_plot.flatten(), index=feature_names_out)
                     
-                    # Get top positive (increasing risk) and negative (decreasing risk) factors
                     positive_factors = shap_series[shap_series > 0].sort_values(ascending=False).head(3)
                     negative_factors = shap_series[shap_series < 0].sort_values(ascending=True).head(3)
 
