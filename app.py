@@ -21,9 +21,9 @@ st.markdown("""
         100% { background-position: 0% 50%; }
     }
 
-    /* Main app and sidebar background with animated gradient */
+    /* Main app and sidebar background with a new, professional animated gradient */
     .stApp, [data-testid="stSidebar"] > div:first-child {
-        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background: linear-gradient(-45deg, #6a11cb, #2575fc, #30cfd0, #2575fc);
         background-size: 400% 400%;
         animation: gradient 15s ease infinite;
     }
