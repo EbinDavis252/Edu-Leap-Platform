@@ -23,12 +23,15 @@ st.markdown("""
 
     /* Main app and sidebar background with a new, professional animated gradient */
     .stApp, [data-testid="stSidebar"] > div:first-child {
-        background: linear-gradient(-45deg, #6a11cb, #2575fc, #30cfd0, #2575fc);
+        background: linear-gradient(-45deg, #480ca8, #560bad, #7209b7, #3f37c9);
         background-size: 400% 400%;
         animation: gradient 15s ease infinite;
     }
 
-    /* Make the sidebar's inner content container transparent to see the gradient behind it */
+    /* Make the sidebar's inner content container transparent and add a border */
+    [data-testid="stSidebar"] > div:first-child {
+        border-right: 2px solid rgba(255, 255, 255, 0.2);
+    }
     [data-testid="stSidebar"] > div:first-child > div:first-child {
         background-color: transparent;
     }
@@ -69,13 +72,13 @@ st.markdown("""
     /* Buttons */
     .stButton>button {
         border-radius: 0.5rem;
-        background-color: #0068C9; /* A professional blue */
+        background-color: #560bad; /* Matching violet color */
         color: white;
         border: none;
         padding: 10px 24px;
     }
     .stButton>button:hover {
-        background-color: #0056b3;
+        background-color: #480ca8;
         color: white;
     }
     
