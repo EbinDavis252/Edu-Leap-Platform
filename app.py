@@ -21,25 +21,19 @@ st.markdown("""
         100% { background-position: 0% 50%; }
     }
 
-    /* Main app background with animated gradient */
-    .stApp {
+    /* Main app and sidebar background with animated gradient */
+    .stApp, [data-testid="stSidebar"] > div:first-child {
         background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
         background-size: 400% 400%;
         animation: gradient 15s ease infinite;
     }
 
-    /* Sidebar styling with the same animated gradient */
-    .st-emotion-cache-16txtl3 {
-        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
-        border-radius: 0.75rem;
-        padding: 1.5rem;
-        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+    /* Make the sidebar's inner content container transparent to see the gradient behind it */
+    [data-testid="stSidebar"] > div:first-child > div:first-child {
+        background-color: transparent;
     }
     
-    /* Frosted glass effect for containers */
+    /* Frosted glass effect for all content containers (main page) */
     .st-emotion-cache-r421ms, .st-emotion-cache-1r6slb0, .st-emotion-cache-1d3wzry, .st-emotion-cache-1v0mbdj, .st-emotion-cache-17xrh1x {
         background-color: rgba(255, 255, 255, 0.9); /* Slightly more opaque for readability */
         backdrop-filter: blur(12px);
@@ -85,9 +79,15 @@ st.markdown("""
         color: white;
     }
     
-    /* Headers and Titles */
+    /* Headers and Titles on main page */
     h1, h2, h3 {
         color: #1E293B; /* Dark slate color for text */
+    }
+
+    /* Ensure text inside sidebar is readable on the gradient */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .st-emotion-cache-10trblm {
+        color: white;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
     }
 
 </style>
