@@ -28,9 +28,9 @@ st.markdown("""
         animation: gradient 15s ease infinite;
     }
 
-    /* Make the sidebar's inner content container transparent and add a thicker border */
+    /* Make the sidebar's inner content container transparent and add a thicker, visible border */
     [data-testid="stSidebar"] > div:first-child {
-        border-right: 3px solid rgba(255, 255, 255, 0.3);
+        border-right: 3px solid rgba(0, 0, 0, 0.2); /* Changed to a semi-transparent black */
     }
     [data-testid="stSidebar"] > div:first-child > div:first-child {
         background-color: transparent;
