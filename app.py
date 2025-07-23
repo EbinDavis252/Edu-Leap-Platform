@@ -14,51 +14,65 @@ st.set_page_config(
 # --- STYLISH ENHANCEMENTS (Custom CSS) ---
 st.markdown("""
 <style>
-    /* Main app background */
+    /* Main app background with education theme */
     .stApp {
-        background-color: #F0F2F6;
+        background-image: url("https://images.unsplash.com/photo-1491841550275-5b462bf48546?q=80&w=2070");
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }
-    /* Login and Register tabs */
+
+    /* Frosted glass effect for containers */
+    .st-emotion-cache-r421ms, .st-emotion-cache-1r6slb0, .st-emotion-cache-1d3wzry, .st-emotion-cache-1v0mbdj, .st-emotion-cache-17xrh1x, .st-emotion-cache-16txtl3 {
+        background-color: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(10px);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    /* Center the login/register forms */
+    .st-emotion-cache-uf99v8 {
+        display: flex;
+        justify-content: center;
+    }
+    
+    /* Login and Register tabs styling */
     .stTabs [data-baseweb="tab-list"] {
 		gap: 24px;
 	}
 	.stTabs [data-baseweb="tab"] {
 		height: 50px;
         white-space: pre-wrap;
-		background-color: #F0F2F6;
+		background-color: rgba(255, 255, 255, 0.5);
 		border-radius: 4px 4px 0px 0px;
 		gap: 1px;
 		padding-top: 10px;
 		padding-bottom: 10px;
     }
 	.stTabs [aria-selected="true"] {
-  		background-color: #FFFFFF;
+  		background-color: rgba(255, 255, 255, 0.8);
 	}
-    /* All containers and cards */
-    .st-emotion-cache-r421ms, .st-emotion-cache-1r6slb0, .st-emotion-cache-1d3wzry, .st-emotion-cache-1v0mbdj, .st-emotion-cache-17xrh1x {
-        border-radius: 0.5rem;
-        padding: 1rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        border: 1px solid #E0E0E0;
-    }
-    /* Metric cards */
-    .st-emotion-cache-1r6slb0 {
-        background-color: #FFFFFF;
-    }
-    /* Sidebar styling */
-    .st-emotion-cache-16txtl3 {
-        padding: 1rem;
-    }
+
     /* Buttons */
     .stButton>button {
         border-radius: 0.5rem;
-        background-color: #4CAF50;
+        background-color: #0068C9; /* A professional blue */
         color: white;
+        border: none;
+        padding: 10px 24px;
     }
     .stButton>button:hover {
-        background-color: #45a049;
+        background-color: #0056b3;
         color: white;
     }
+    
+    /* Headers and Titles */
+    h1, h2, h3 {
+        color: #1E293B; /* Dark slate color for text */
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -131,33 +145,35 @@ def logout():
 # --- Main Application ---
 
 if not st.session_state['logged_in']:
-    st.title("🎓 Welcome to Edu-Leap")
-    
-    login_tab, register_tab = st.tabs(["Login", "Register"])
-    with login_tab:
-        with st.container():
-            st.header("Login")
-            with st.form("login_form"):
-                username = st.text_input("Username", key="login_user")
-                password = st.text_input("Password", type="password", key="login_pass")
-                if st.form_submit_button("Login"):
-                    check_login(username, password)
-            st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
-            
-    with register_tab:
-        with st.container():
-            st.header("Register New User")
-            if st.session_state.get('registration_success'):
-                st.success("Registration successful! Please switch to the Login tab to continue.")
-                if st.button("Register another user?"):
-                    st.session_state['registration_success'] = False
-                    st.rerun()
-            else:
-                with st.form("register_form"):
-                    new_username = st.text_input("Choose a Username", key="reg_user")
-                    new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
-                    if st.form_submit_button("Register"):
-                        register_user(new_username, new_password)
+    _, col2, _ = st.columns([1,2,1])
+    with col2:
+        st.title("🎓 Welcome to Edu-Leap")
+        
+        login_tab, register_tab = st.tabs(["Login", "Register"])
+        with login_tab:
+            with st.container():
+                st.header("Login")
+                with st.form("login_form"):
+                    username = st.text_input("Username", key="login_user")
+                    password = st.text_input("Password", type="password", key="login_pass")
+                    if st.form_submit_button("Login"):
+                        check_login(username, password)
+                st.info("Default users: `admin`/`admin123` or `guest`/`guest`")
+                
+        with register_tab:
+            with st.container():
+                st.header("Register New User")
+                if st.session_state.get('registration_success'):
+                    st.success("Registration successful! Please switch to the Login tab to continue.")
+                    if st.button("Register another user?"):
+                        st.session_state['registration_success'] = False
+                        st.rerun()
+                else:
+                    with st.form("register_form"):
+                        new_username = st.text_input("Choose a Username", key="reg_user")
+                        new_password = st.text_input("Choose a Password", type="password", key="reg_pass")
+                        if st.form_submit_button("Register"):
+                            register_user(new_username, new_password)
 else:
     model = load_model()
     if model is None:
