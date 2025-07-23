@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import joblib
 import io
+import base64
+from fpdf import FPDF
 
 # --- Page Configuration (MUST be the first Streamlit command) ---
 st.set_page_config(
@@ -162,6 +164,51 @@ def logout():
     st.session_state.pop('username', None)
     st.rerun()
 
+# --- PDF Reporting Function ---
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, 'Edu-Leap Executive Summary', 0, 1, 'C')
+        self.ln(10)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+def generate_pdf(metrics, top_at_risk):
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font('Arial', '', 12)
+    
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, 'Key Performance Metrics', 0, 1)
+    pdf.set_font('Arial', '', 12)
+    for key, value in metrics.items():
+        pdf.cell(0, 10, f"{key}: {value}", 0, 1)
+    
+    pdf.ln(10)
+    
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(0, 10, 'Top 10 At-Risk Students', 0, 1)
+    pdf.set_font('Arial', '', 10)
+    
+    # Create table header
+    pdf.cell(30, 10, 'Student ID', 1)
+    pdf.cell(80, 10, 'Course', 1)
+    pdf.cell(40, 10, 'Risk Probability (%)', 1)
+    pdf.ln()
+
+    # Create table rows
+    for index, row in top_at_risk.head(10).iterrows():
+        pdf.cell(30, 10, str(row['StudentID']), 1)
+        pdf.cell(80, 10, str(row['Course_Name']), 1)
+        pdf.cell(40, 10, f"{row['Risk_Probability_%']:.2f}", 1)
+        pdf.ln()
+        
+    return pdf.output(dest='S').encode('latin-1')
+
+
 # --- Main Application ---
 
 if not st.session_state['logged_in']:
@@ -212,9 +259,11 @@ else:
                 "Dashboard Overview", 
                 "Historical Trends", 
                 "Risk Prediction", 
-                "Student Profile Deep Dive", # <-- NEW PAGE
+                "Student Profile Deep Dive",
+                "Comparative Analytics", # <-- NEW PAGE
                 "Financial 'What-If' Simulator",
-                "At-Risk Students Report & Actions"
+                "At-Risk Students Report & Actions",
+                "Communication Module" # <-- NEW PAGE
             ])
 
             if page == "Dashboard Overview":
@@ -227,6 +276,9 @@ else:
                     else:
                         df_for_prediction = student_df[model_features]
                         predictions = model.predict(df_for_prediction)
+                        risk_probabilities = model.predict_proba(df_for_prediction)[:, 1]
+                        student_df['Risk_Probability_%'] = (risk_probabilities * 100)
+                        
                         num_at_risk = np.sum(predictions)
                         attrition_rate = (num_at_risk / total_students) * 100 if total_students > 0 else 0
                         
@@ -242,19 +294,35 @@ else:
                         at_risk_by_dept = at_risk_df[at_risk_df['is_at_risk'] == 1]['Department'].value_counts()
                         st.bar_chart(at_risk_by_dept)
 
+                        # --- NEW PDF REPORTING FEATURE ---
+                        st.markdown("---")
+                        st.subheader("Download Report")
+                        metrics_for_pdf = {
+                            "Total Students": total_students,
+                            "Predicted At-Risk Students": num_at_risk,
+                            "Predicted Attrition Rate (%)": f"{attrition_rate:.2f}"
+                        }
+                        top_at_risk_df = student_df[student_df['is_at_risk'] == 1].sort_values(by='Risk_Probability_%', ascending=False)
+                        
+                        pdf_data = generate_pdf(metrics_for_pdf, top_at_risk_df)
+                        st.download_button(
+                            label="📥 Download Executive Summary (PDF)",
+                            data=pdf_data,
+                            file_name="Edu-Leap_Executive_Summary.pdf",
+                            mime="application/pdf"
+                        )
+
             elif page == "Historical Trends":
                 st.header("📈 Historical Trend Analysis")
+                # ... (Code for this page remains the same)
                 with st.container():
                     st.markdown("Analyze how key metrics have evolved over different student cohorts.")
                     trends = student_df.groupby('Joining_Year').agg(total_students=('StudentID', 'count'), dropout_count=('Is_Dropout', 'sum'), avg_attendance=('Avg_Attendance', 'mean'), avg_cgpa=('Final_CGPA', 'mean')).reset_index()
                     trends['attrition_rate'] = (trends['dropout_count'] / trends['total_students']) * 100
-                    
                     st.subheader("Year-over-Year Data")
                     st.dataframe(trends.sort_values(by='Joining_Year'))
-                    
                     st.subheader("Attrition Rate Over Time")
                     st.line_chart(trends.set_index('Joining_Year')['attrition_rate'])
-                    
                     st.subheader("Academic Performance Trends")
                     col1, col2 = st.columns(2)
                     with col1:
@@ -264,6 +332,7 @@ else:
 
             elif page == "Risk Prediction":
                 st.header("🔍 Manual Risk Prediction")
+                # ... (Code for this page remains the same)
                 with st.container():
                     st.markdown("Enter a student's details manually to assess their dropout risk.")
                     with st.form("prediction_form"):
@@ -281,32 +350,18 @@ else:
                             state = st.selectbox("State", options=student_df['State'].unique())
                             entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
                             scholarship = st.selectbox("Scholarship Recipient", options=student_df['Scholarship_Recipient'].unique())
-                        
                         course_name = st.selectbox("Course Name", options=student_df['Course_Name'].unique())
                         department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
                         st.info(f"Selected Department: **{department}**")
-                        
                         avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
                         final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0)
-                        
                         submitted = st.form_submit_button("🔮 Predict Risk")
-
                     if submitted:
                         model_features = model.feature_names_in_
-                        input_data_df = pd.DataFrame({
-                            'Age': [age], 'City_Tier': [city_tier], 'State': [state],
-                            '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc],
-                            'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name],
-                            'Department': [department], 'Fee_Payment_Status': [fee_status],
-                            'Scholarship_Recipient': [scholarship],
-                            'Extracurricular_Activity_Count': [extracurricular_count],
-                            'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]
-                        })
+                        input_data_df = pd.DataFrame({'Age': [age], 'City_Tier': [city_tier], 'State': [state], '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc], 'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name], 'Department': [department], 'Fee_Payment_Status': [fee_status], 'Scholarship_Recipient': [scholarship], 'Extracurricular_Activity_Count': [extracurricular_count], 'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]})
                         input_data_df = input_data_df[model_features]
-
                         prediction_proba = model.predict_proba(input_data_df)[0][1]
                         risk_score = prediction_proba * 100
-
                         st.subheader("Results")
                         st.write("#### Risk Assessment")
                         if risk_score > 60:
@@ -315,20 +370,16 @@ else:
                             st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                         else:
                             st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
-            
-            # --- NEW PAGE IMPLEMENTATION ---
+
             elif page == "Student Profile Deep Dive":
                 st.header("👤 Student Profile Deep Dive")
+                # ... (Code for this page remains the same)
                 with st.container():
                     st.markdown("Select a student to view their complete profile and performance trends.")
-                    
                     student_id_to_view = st.selectbox("Select Student ID", options=student_df['StudentID'].unique())
-                    
                     if student_id_to_view:
                         student_data = student_df[student_df['StudentID'] == student_id_to_view].iloc[0]
-                        
                         st.subheader(f"Profile for Student ID: {student_id_to_view}")
-                        
                         col1, col2 = st.columns(2)
                         with col1:
                             st.metric("Course", student_data['Course_Name'])
@@ -338,28 +389,15 @@ else:
                             st.metric("Department", student_data['Department'])
                             st.metric("Entrance Score", f"{student_data['Entrance_Exam_Score']}")
                             st.metric("Scholarship", student_data['Scholarship_Recipient'])
-
                         st.markdown("---")
                         st.subheader("Simulated Performance Trends")
-                        
-                        # Simulate semester-wise data for visualization
-                        np.random.seed(int(student_id_to_view)) # Seed for consistent simulation
+                        np.random.seed(int(student_id_to_view))
                         semesters = [f"Sem {i}" for i in range(1, 7)]
-                        
-                        # Simulate SGPA around the final CGPA
                         sgpa_trend = np.random.normal(loc=student_data['Final_CGPA'], scale=0.5, size=6)
                         sgpa_trend = np.clip(sgpa_trend, 0, 10)
-                        
-                        # Simulate Attendance around the average
                         attendance_trend = np.random.normal(loc=student_data['Avg_Attendance'], scale=5, size=6)
                         attendance_trend = np.clip(attendance_trend, 40, 100)
-                        
-                        trend_df = pd.DataFrame({
-                            'Semester': semesters,
-                            'SGPA': sgpa_trend,
-                            'Attendance (%)': attendance_trend
-                        }).set_index('Semester')
-                        
+                        trend_df = pd.DataFrame({'Semester': semesters, 'SGPA': sgpa_trend, 'Attendance (%)': attendance_trend}).set_index('Semester')
                         col1, col2 = st.columns(2)
                         with col1:
                             st.write("SGPA Trend")
@@ -367,15 +405,52 @@ else:
                         with col2:
                             st.write("Attendance Trend")
                             st.line_chart(trend_df['Attendance (%)'])
-                            
                         st.markdown("---")
                         st.subheader("Action Log & Notes")
                         current_note = st.session_state['student_notes'].get(student_id_to_view, "No notes yet.")
                         st.text_area("Notes for this student:", value=current_note, height=150, disabled=True)
 
+            elif page == "Comparative Analytics":
+                st.header("🔬 Comparative Analytics Dashboard")
+                with st.container():
+                    st.markdown("Compare the performance and risk profiles of different student segments.")
+                    
+                    categorical_cols = ['Course_Name', 'City_Tier', 'State', 'Department', 'Fee_Payment_Status', 'Scholarship_Recipient']
+                    compare_by = st.selectbox("Select category to compare by:", options=categorical_cols)
+                    
+                    # Get unique values for the selected category
+                    unique_values = student_df[compare_by].unique()
+                    
+                    # Allow user to select multiple groups to compare
+                    selected_groups = st.multiselect(f"Select groups from '{compare_by}' to compare:", options=unique_values, default=unique_values[:2])
+
+                    if len(selected_groups) > 1:
+                        comparison_df = student_df[student_df[compare_by].isin(selected_groups)]
+                        
+                        # Calculate predictions for this subset
+                        model_features = model.feature_names_in_
+                        predictions = model.predict(comparison_df[model_features])
+                        comparison_df['is_at_risk'] = predictions
+
+                        # Group by the selected category and calculate metrics
+                        comparison_results = comparison_df.groupby(compare_by).agg(
+                            total_students=('StudentID', 'count'),
+                            at_risk_count=('is_at_risk', 'sum'),
+                            avg_cgpa=('Final_CGPA', 'mean')
+                        ).reset_index()
+                        comparison_results['attrition_rate'] = (comparison_results['at_risk_count'] / comparison_results['total_students']) * 100
+                        
+                        st.subheader("Comparison Results")
+                        st.dataframe(comparison_results)
+                        
+                        st.subheader("Attrition Rate Comparison")
+                        st.bar_chart(comparison_results.set_index(compare_by)['attrition_rate'])
+                    else:
+                        st.warning("Please select at least two groups to compare.")
 
             elif page == "Financial 'What-If' Simulator":
                 st.header("💰 Financial 'What-If' Simulator")
+                # ... (Code for this page remains the same)
                 with st.container():
                     st.markdown("Model the financial impact of your intervention strategies.")
                     st.subheader("1. Set Your Baseline Assumptions")
@@ -389,19 +464,16 @@ else:
                         st.metric("Predicted Dropouts This Year", value=f"{num_at_risk}")
                     current_revenue_loss = num_at_risk * avg_fee
                     st.error(f"**Current Expected Annual Revenue Loss: ₹{current_revenue_loss:,.2f}**")
-                    
                     st.subheader("2. Design Your Intervention Program")
                     col1, col2 = st.columns(2)
                     with col1:
                         intervention_cost = st.number_input("Total Cost of Intervention Program (₹)", min_value=0, value=500000, step=25000)
                     with col2:
                         retention_improvement = st.slider("Expected Improvement in Retention (%)", min_value=0, max_value=100, value=20, step=1)
-                    
                     students_retained = int(num_at_risk * (retention_improvement / 100))
                     revenue_saved = students_retained * avg_fee
                     net_impact = revenue_saved - intervention_cost
                     roi = (net_impact / intervention_cost) * 100 if intervention_cost > 0 else 0
-                    
                     st.subheader("3. See the Financial Projection")
                     st.success(f"**Projected Revenue Saved: ₹{revenue_saved:,.2f}** (by retaining {students_retained} students)")
                     if net_impact >= 0:
@@ -413,6 +485,7 @@ else:
 
             elif page == "At-Risk Students Report & Actions":
                 st.header("📝 At-Risk Students Report & Action Tracker")
+                # ... (Code for this page remains the same)
                 with st.container():
                     model_features = model.feature_names_in_
                     risk_probabilities = model.predict_proba(student_df[model_features])[:, 1]
@@ -431,6 +504,70 @@ else:
                             if st.button("Save Note", key=f"save_{student_id}"):
                                 st.session_state['student_notes'][student_id] = note_text
                                 st.success(f"Note saved for student {student_id}.")
+
+            elif page == "Communication Module":
+                st.header("📧 Personalized Communication Module")
+                with st.container():
+                    st.markdown("Generate and download personalized outreach emails for at-risk students.")
+                    
+                    st.subheader("1. Select Target Audience")
+                    model_features = model.feature_names_in_
+                    predictions = model.predict(student_df[model_features])
+                    at_risk_df = student_df[predictions == 1]
+                    
+                    filter_reason = st.selectbox("Filter at-risk students by reason:", ["All At-Risk", "Low Attendance (<65%)", "Low CGPA (<6.0)", "Fee Status: Defaulted"])
+
+                    if filter_reason == "Low Attendance (<65%)":
+                        target_students = at_risk_df[at_risk_df['Avg_Attendance'] < 65]
+                    elif filter_reason == "Low CGPA (<6.0)":
+                        target_students = at_risk_df[at_risk_df['Final_CGPA'] < 6.0]
+                    elif filter_reason == "Fee Status: Defaulted":
+                        target_students = at_risk_df[at_risk_df['Fee_Payment_Status'] == 'Defaulted']
+                    else:
+                        target_students = at_risk_df
+                    
+                    st.write(f"Found {len(target_students)} students matching the criteria.")
+                    
+                    st.subheader("2. Customize Email Template")
+                    email_template = st.text_area(
+                        "Email Template (use [Name] and [Course] as placeholders):",
+                        "Subject: Checking In - Your Success Matters to Us\n\n"
+                        "Dear [Name],\n\n"
+                        "We hope this message finds you well. We're reaching out from the student success office at our institution.\n\n"
+                        "We want to ensure you have all the resources you need to succeed in your [Course] program. If you are facing any challenges, academic or otherwise, please know that we are here to help.\n\n"
+                        "We encourage you to schedule a quick chat with your faculty advisor to discuss your progress.\n\n"
+                        "Best regards,\n\n"
+                        "Student Success Team",
+                        height=250
+                    )
+                    
+                    st.subheader("3. Generate & Download")
+                    if not target_students.empty:
+                        if st.button("Generate Email List"):
+                            email_list = []
+                            for index, row in target_students.iterrows():
+                                student_name = f"Student_{row['StudentID']}" # Using ID as a placeholder for name
+                                course_name = row['Course_Name']
+                                personalized_email = email_template.replace("[Name]", student_name).replace("[Course]", course_name)
+                                email_list.append({
+                                    "StudentID": row['StudentID'],
+                                    "Email_Content": personalized_email
+                                })
+                            
+                            email_df = pd.DataFrame(email_list)
+                            
+                            st.dataframe(email_df)
+                            
+                            csv = email_df.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download as CSV",
+                                data=csv,
+                                file_name="personalized_email_outreach.csv",
+                                mime="text/csv",
+                            )
+                    else:
+                        st.warning("No students match the selected criteria.")
+
     else:
         st.info("Awaiting data file. Please upload a CSV to activate the dashboards.")
 
