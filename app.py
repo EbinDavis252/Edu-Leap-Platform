@@ -14,18 +14,35 @@ st.set_page_config(
 # --- STYLISH ENHANCEMENTS (Custom CSS) ---
 st.markdown("""
 <style>
-    /* Main app background with education theme */
-    .stApp {
-        background-image: url("https://images.unsplash.com/photo-1491841550275-5b462bf48546?q=80&w=2070");
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
+    /* Keyframes for the animated gradient background */
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
     }
 
+    /* Main app background with animated gradient */
+    .stApp {
+        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+    }
+
+    /* Sidebar styling with the same animated gradient */
+    .st-emotion-cache-16txtl3 {
+        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+    
     /* Frosted glass effect for containers */
-    .st-emotion-cache-r421ms, .st-emotion-cache-1r6slb0, .st-emotion-cache-1d3wzry, .st-emotion-cache-1v0mbdj, .st-emotion-cache-17xrh1x, .st-emotion-cache-16txtl3 {
-        background-color: rgba(255, 255, 255, 0.8);
-        backdrop-filter: blur(10px);
+    .st-emotion-cache-r421ms, .st-emotion-cache-1r6slb0, .st-emotion-cache-1d3wzry, .st-emotion-cache-1v0mbdj, .st-emotion-cache-17xrh1x {
+        background-color: rgba(255, 255, 255, 0.9); /* Slightly more opaque for readability */
+        backdrop-filter: blur(12px);
         border-radius: 0.75rem;
         padding: 1.5rem;
         box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
@@ -45,14 +62,14 @@ st.markdown("""
 	.stTabs [data-baseweb="tab"] {
 		height: 50px;
         white-space: pre-wrap;
-		background-color: rgba(255, 255, 255, 0.5);
+		background-color: rgba(255, 255, 255, 0.6);
 		border-radius: 4px 4px 0px 0px;
 		gap: 1px;
 		padding-top: 10px;
 		padding-bottom: 10px;
     }
 	.stTabs [aria-selected="true"] {
-  		background-color: rgba(255, 255, 255, 0.8);
+  		background-color: rgba(255, 255, 255, 0.9);
 	}
 
     /* Buttons */
