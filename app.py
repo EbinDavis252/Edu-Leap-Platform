@@ -124,8 +124,8 @@ else:
                 "At-Risk Students Report & Actions"
             ])
 
-            if page == "Risk Prediction & Recommendations":
-                st.header("🔍 Manual Risk Prediction & Recommendations")
+            if page == "Risk Prediction":
+                st.header("🔍 Manual Risk Prediction")
                 st.markdown("Enter a student's details manually to assess their dropout risk and receive tailored intervention strategies.")
                 
                 with st.form("prediction_form"):
