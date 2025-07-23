@@ -54,20 +54,20 @@ st.markdown("""
     
     /* Login and Register tabs styling */
     .stTabs [data-baseweb="tab-list"] {
-		gap: 24px;
-	}
-	.stTabs [data-baseweb="tab"] {
-		height: 50px;
-        white-space: pre-wrap;
-		background-color: rgba(255, 255, 255, 0.6);
-		border-radius: 4px 4px 0px 0px;
-		gap: 1px;
-		padding-top: 10px;
-		padding-bottom: 10px;
+        gap: 24px;
     }
-	.stTabs [aria-selected="true"] {
-  		background-color: rgba(255, 255, 255, 0.9);
-	}
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: rgba(255, 255, 255, 0.6);
+        border-radius: 4px 4px 0px 0px;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: rgba(255, 255, 255, 0.9);
+    }
 
     /* Buttons */
     .stButton>button {
@@ -212,6 +212,7 @@ else:
                 "Dashboard Overview", 
                 "Historical Trends", 
                 "Risk Prediction", 
+                "Student Profile Deep Dive", # <-- NEW PAGE
                 "Financial 'What-If' Simulator",
                 "At-Risk Students Report & Actions"
             ])
@@ -314,6 +315,64 @@ else:
                             st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
                         else:
                             st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
+            
+            # --- NEW PAGE IMPLEMENTATION ---
+            elif page == "Student Profile Deep Dive":
+                st.header("👤 Student Profile Deep Dive")
+                with st.container():
+                    st.markdown("Select a student to view their complete profile and performance trends.")
+                    
+                    student_id_to_view = st.selectbox("Select Student ID", options=student_df['StudentID'].unique())
+                    
+                    if student_id_to_view:
+                        student_data = student_df[student_df['StudentID'] == student_id_to_view].iloc[0]
+                        
+                        st.subheader(f"Profile for Student ID: {student_id_to_view}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Course", student_data['Course_Name'])
+                            st.metric("12th Percentage", f"{student_data['12th_Percentage']}%")
+                            st.metric("Fee Status", student_data['Fee_Payment_Status'])
+                        with col2:
+                            st.metric("Department", student_data['Department'])
+                            st.metric("Entrance Score", f"{student_data['Entrance_Exam_Score']}")
+                            st.metric("Scholarship", student_data['Scholarship_Recipient'])
+
+                        st.markdown("---")
+                        st.subheader("Simulated Performance Trends")
+                        
+                        # Simulate semester-wise data for visualization
+                        np.random.seed(int(student_id_to_view)) # Seed for consistent simulation
+                        semesters = [f"Sem {i}" for i in range(1, 7)]
+                        
+                        # Simulate SGPA around the final CGPA
+                        sgpa_trend = np.random.normal(loc=student_data['Final_CGPA'], scale=0.5, size=6)
+                        sgpa_trend = np.clip(sgpa_trend, 0, 10)
+                        
+                        # Simulate Attendance around the average
+                        attendance_trend = np.random.normal(loc=student_data['Avg_Attendance'], scale=5, size=6)
+                        attendance_trend = np.clip(attendance_trend, 40, 100)
+                        
+                        trend_df = pd.DataFrame({
+                            'Semester': semesters,
+                            'SGPA': sgpa_trend,
+                            'Attendance (%)': attendance_trend
+                        }).set_index('Semester')
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("SGPA Trend")
+                            st.line_chart(trend_df['SGPA'])
+                        with col2:
+                            st.write("Attendance Trend")
+                            st.line_chart(trend_df['Attendance (%)'])
+                            
+                        st.markdown("---")
+                        st.subheader("Action Log & Notes")
+                        current_note = st.session_state['student_notes'].get(student_id_to_view, "No notes yet.")
+                        st.text_area("Notes for this student:", value=current_note, height=150, disabled=True)
+
 
             elif page == "Financial 'What-If' Simulator":
                 st.header("💰 Financial 'What-If' Simulator")
