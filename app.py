@@ -398,7 +398,7 @@ else:
                     st.info("Tracks the average final CGPA for each cohort. A declining trend could indicate issues with academic rigor or student preparedness.", icon="💡")
                 with col2:
                     st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
-                    st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="💡")
+                    st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="�")
 
         # --- Page: Risk Prediction ---
         elif page == "Risk Prediction":
@@ -511,75 +511,74 @@ else:
                     current_note = st.session_state['student_notes'].get(student_id_to_view, "No notes yet.")
                     st.text_area("Notes for this student (edit in 'Actions' tab):", value=current_note, height=150, disabled=True)
         
-        # --- Page: Comparative Analytics (ENHANCED) ---
+        # --- Page: Comparative Analytics (REVISED) ---
         elif page == "Comparative Analytics":
-            st.header("⚖️ Comparative Analytics")
+            st.header("🔬 Filtered Segment Analysis")
             with st.container():
-                st.markdown("Compare attrition risk and performance across different student segments.")
+                st.markdown("Use the filters below to isolate and analyze a specific segment of the student population.")
                 
+                st.subheader("Filter Controls")
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.subheader("Group 1 Filters")
-                    dept1 = st.selectbox("Department", options=["All"] + sorted(student_df['Department'].unique()), key="dept1")
-                    tier1 = st.selectbox("City Tier", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier1")
-                    scholar1 = st.selectbox("Scholarship", options=["All"] + sorted(student_df['Scholarship_Recipient'].unique()), key="scholar1")
-                    fee1 = st.selectbox("Fee Status", options=["All"] + sorted(student_df['Fee_Payment_Status'].unique()), key="fee1")
+                    dept = st.selectbox("Department", options=["All"] + sorted(student_df['Department'].unique()), key="dept_filter")
+                    scholar = st.selectbox("Scholarship Recipient", options=["All"] + sorted(student_df['Scholarship_Recipient'].unique()), key="scholar_filter")
                 
                 with col2:
-                    st.subheader("Group 2 Filters")
-                    dept2 = st.selectbox("Department", options=["All"] + sorted(student_df['Department'].unique()), key="dept2", index=1) # Default to a different dept
-                    tier2 = st.selectbox("City Tier", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier2")
-                    scholar2 = st.selectbox("Scholarship", options=["All"] + sorted(student_df['Scholarship_Recipient'].unique()), key="scholar2")
-                    fee2 = st.selectbox("Fee Status", options=["All"] + sorted(student_df['Fee_Payment_Status'].unique()), key="fee2")
+                    tier = st.selectbox("City Tier", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier_filter")
+                    fee = st.selectbox("Fee Payment Status", options=["All"] + sorted(student_df['Fee_Payment_Status'].unique()), key="fee_filter")
 
-                def filter_df(df, dept, tier, scholar, fee):
-                    filtered = df.copy()
-                    if dept != "All":
-                        filtered = filtered[filtered['Department'] == dept]
-                    if tier != "All":
-                        filtered = filtered[filtered['City_Tier'] == tier]
-                    if scholar != "All":
-                        filtered = filtered[filtered['Scholarship_Recipient'] == scholar]
-                    if fee != "All":
-                        filtered = filtered[filtered['Fee_Payment_Status'] == fee]
-                    return filtered
-
-                group1_df = filter_df(student_df, dept1, tier1, scholar1, fee1)
-                group2_df = filter_df(student_df, dept2, tier2, scholar2, fee2)
+                # Filtering logic
+                filtered_df = student_df.copy()
+                if dept != "All":
+                    filtered_df = filtered_df[filtered_df['Department'] == dept]
+                if tier != "All":
+                    filtered_df = filtered_df[filtered_df['City_Tier'] == tier]
+                if scholar != "All":
+                    filtered_df = filtered_df[filtered_df['Scholarship_Recipient'] == scholar]
+                if fee != "All":
+                    filtered_df = filtered_df[filtered_df['Fee_Payment_Status'] == fee]
 
                 st.divider()
-                st.subheader("Comparison Results")
+                st.subheader("Analysis of Filtered Group")
 
-                if group1_df.empty or group2_df.empty:
-                    st.warning("One or both of the selected groups have no students. Please adjust your filters.")
+                if filtered_df.empty:
+                    st.warning("No students match the selected criteria. Please adjust your filters.")
                 else:
-                    g1_rate = (group1_df['is_at_risk'].sum() / len(group1_df) * 100)
-                    g1_cgpa = group1_df['Final_CGPA'].mean()
-                    g1_attendance = group1_df['Avg_Attendance'].mean()
+                    # Calculate metrics for the filtered group
+                    total_students = len(filtered_df)
+                    num_at_risk = filtered_df['is_at_risk'].sum()
+                    num_not_at_risk = total_students - num_at_risk
+                    attrition_rate = (num_at_risk / total_students * 100) if total_students > 0 else 0
+                    avg_cgpa = filtered_df['Final_CGPA'].mean()
+                    avg_attendance = filtered_df['Avg_Attendance'].mean()
 
-                    g2_rate = (group2_df['is_at_risk'].sum() / len(group2_df) * 100)
-                    g2_cgpa = group2_df['Final_CGPA'].mean()
-                    g2_attendance = group2_df['Avg_Attendance'].mean()
+                    # Display metrics
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("👥 Total Students", f"{total_students}")
+                    m2.metric("❗ At-Risk Students", f"{num_at_risk}")
+                    m3.metric("📉 Attrition Rate", f"{attrition_rate:.2f}%")
+                    m4.metric("🎓 Avg. Final CGPA", f"{avg_cgpa:.2f}")
                     
-                    # Create a DataFrame for plotting
-                    comparison_data = {
-                        "Group 1 ({} students)".format(len(group1_df)): [g1_rate, g1_cgpa, g1_attendance],
-                        "Group 2 ({} students)".format(len(group2_df)): [g2_rate, g2_cgpa, g2_attendance]
-                    }
-                    plot_df = pd.DataFrame(comparison_data, index=["Predicted Attrition Rate (%)", "Average Final CGPA", "Average Attendance (%)"])
-                    
-                    st.bar_chart(plot_df)
+                    st.divider()
+
+                    # Visualization for the filtered group
+                    st.write("**Risk Profile of this Segment**")
+                    risk_composition = pd.DataFrame({
+                        'Category': ['At-Risk', 'Not At-Risk'],
+                        'Number of Students': [num_at_risk, num_not_at_risk]
+                    }).set_index('Category')
+
+                    st.bar_chart(risk_composition, color="#FF4B4B")
                     
                     st.info(
                         """
-                        **How to Interpret this Chart:**
-                        - **Predicted Attrition Rate**: A higher bar indicates a group with a greater predicted risk of students dropping out.
-                        - **Average Final CGPA**: A lower bar suggests the group is struggling more academically.
-                        - **Average Attendance**: A lower bar can be a leading indicator of disengagement.
-
-                        Use this visual to quickly identify which student segments require the most attention and resources.
-                        """, icon="🔬"
+                        **How to Interpret this View:**
+                        - The metrics above provide a snapshot of the student group you have selected with the filters.
+                        - The bar chart visualizes the number of students within this segment who are predicted to be at-risk versus those who are not.
+                        - Use these filters to drill down into specific cohorts (e.g., non-scholarship students from Tier 2 cities in the Engineering department) to identify hidden pockets of high risk.
+                        """, icon="💡"
                     )
+
 
         # --- Page: Financial 'What-If' Simulator ---
         elif page == "Financial 'What-If' Simulator":
@@ -699,3 +698,4 @@ Edu-Leap System
         st.error("There was an error processing the uploaded file. Please ensure it has the correct columns and format.")
     else:
         st.info("Awaiting data file. Please upload a CSV in the sidebar to activate the dashboards.")
+�
