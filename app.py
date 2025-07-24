@@ -698,4 +698,3 @@ Edu-Leap System
         st.error("There was an error processing the uploaded file. Please ensure it has the correct columns and format.")
     else:
         st.info("Awaiting data file. Please upload a CSV in the sidebar to activate the dashboards.")
-�
