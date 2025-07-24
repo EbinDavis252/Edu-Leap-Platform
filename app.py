@@ -5,7 +5,7 @@ import joblib
 import io
 import base64
 from fpdf import FPDF
-import hashlib # FIX: Imported hashlib for robust seeding
+import hashlib
 
 # --- Page Configuration (MUST be the first Streamlit command) ---
 st.set_page_config(
@@ -111,7 +111,6 @@ if 'registration_success' not in st.session_state:
     st.session_state['registration_success'] = False
 if 'student_df' not in st.session_state:
     st.session_state['student_df'] = None
-# FIX: Added new session state keys for robust data handling
 if 'course_to_dept_map' not in st.session_state:
     st.session_state['course_to_dept_map'] = {}
 
@@ -136,7 +135,6 @@ def load_and_prepare_data(uploaded_file):
     """Reads data from the user's uploaded file and prepares it."""
     try:
         df = pd.read_csv(uploaded_file)
-        # FIX: Added a critical check for the StudentID column
         if 'StudentID' not in df.columns:
             st.error("Fatal Error: 'StudentID' column is missing from the uploaded file. This column is required for the application to function.")
             return None
@@ -290,7 +288,6 @@ else:
                 df['Risk_Probability_%'] = (risk_probabilities * 100)
                 st.session_state.student_df = df # Store the processed dataframe in session state
                 
-                # FIX: Create and store the course-to-department map for robust lookup later
                 st.session_state.course_to_dept_map = df.drop_duplicates(subset=['Course_Name']).set_index('Course_Name')['Department'].to_dict()
         else:
             st.session_state.student_df = "error"
@@ -404,7 +401,6 @@ else:
                     st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="💡")
 
         # --- Page: Risk Prediction ---
-        # --- Page: Risk Prediction ---
         elif page == "Risk Prediction":
             st.header("🔍 Manual Risk Prediction")
             with st.container():
@@ -425,20 +421,16 @@ else:
                         entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
                         scholarship = st.selectbox("Scholarship Recipient", options=sorted(student_df['Scholarship_Recipient'].unique()))
                     
-                    # FIX: Safely handle the course and department selection
                     course_to_dept_map = st.session_state.course_to_dept_map
                     available_courses = sorted(course_to_dept_map.keys())
                     
-                    # Let the user select a course from the available options
-                    course_name = st.selectbox("Course Name", options=available_courses)
+                    course_name = st.selectbox("Course Name", options=available_courses, help="This list is populated from your uploaded CSV file.")
                     
-                    department = None # Initialize department as None
-                    # Only try to get the department if a course was actually selected
+                    department = None 
                     if course_name:
                         department = course_to_dept_map.get(course_name)
                         st.info(f"Selected Department: **{department}**")
                     else:
-                        # Show a warning if no courses are in the data
                         st.warning("No courses available to select. Please check your uploaded data file.")
 
                     avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
@@ -447,7 +439,6 @@ else:
                     submitted = st.form_submit_button("🔮 Predict Risk")
                 
                 if submitted:
-                    # FIX: Add a guard to ensure prediction doesn't run with invalid data
                     if not department:
                         st.error("Cannot predict risk. No course was selected or available in the data.")
                     else:
@@ -495,7 +486,6 @@ else:
                     st.divider()
                     st.subheader("Simulated Performance Trends")
                     
-                    # FIX: Use a robust hash-based seed for reproducibility with any StudentID format
                     seed_value = int(hashlib.md5(str(student_id_to_view).encode()).hexdigest(), 16) % (10**8)
                     np.random.seed(seed_value)
 
@@ -521,7 +511,7 @@ else:
                     current_note = st.session_state['student_notes'].get(student_id_to_view, "No notes yet.")
                     st.text_area("Notes for this student (edit in 'Actions' tab):", value=current_note, height=150, disabled=True)
         
-        # --- Page: Comparative Analytics ---
+        # --- Page: Comparative Analytics (ENHANCED) ---
         elif page == "Comparative Analytics":
             st.header("⚖️ Comparative Analytics")
             with st.container():
@@ -529,53 +519,67 @@ else:
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.subheader("Group 1")
-                    dept1 = st.selectbox("Department (Group 1)", options=["All"] + sorted(student_df['Department'].unique()), key="dept1")
-                    tier1 = st.selectbox("City Tier (Group 1)", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier1")
+                    st.subheader("Group 1 Filters")
+                    dept1 = st.selectbox("Department", options=["All"] + sorted(student_df['Department'].unique()), key="dept1")
+                    tier1 = st.selectbox("City Tier", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier1")
+                    scholar1 = st.selectbox("Scholarship", options=["All"] + sorted(student_df['Scholarship_Recipient'].unique()), key="scholar1")
+                    fee1 = st.selectbox("Fee Status", options=["All"] + sorted(student_df['Fee_Payment_Status'].unique()), key="fee1")
                 
                 with col2:
-                    st.subheader("Group 2")
-                    dept2 = st.selectbox("Department (Group 2)", options=["All"] + sorted(student_df['Department'].unique()), key="dept2")
-                    tier2 = st.selectbox("City Tier (Group 2)", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier2")
+                    st.subheader("Group 2 Filters")
+                    dept2 = st.selectbox("Department", options=["All"] + sorted(student_df['Department'].unique()), key="dept2", index=1) # Default to a different dept
+                    tier2 = st.selectbox("City Tier", options=["All"] + sorted(student_df['City_Tier'].unique()), key="tier2")
+                    scholar2 = st.selectbox("Scholarship", options=["All"] + sorted(student_df['Scholarship_Recipient'].unique()), key="scholar2")
+                    fee2 = st.selectbox("Fee Status", options=["All"] + sorted(student_df['Fee_Payment_Status'].unique()), key="fee2")
 
-                def filter_df(df, dept, tier):
+                def filter_df(df, dept, tier, scholar, fee):
                     filtered = df.copy()
                     if dept != "All":
                         filtered = filtered[filtered['Department'] == dept]
                     if tier != "All":
                         filtered = filtered[filtered['City_Tier'] == tier]
+                    if scholar != "All":
+                        filtered = filtered[filtered['Scholarship_Recipient'] == scholar]
+                    if fee != "All":
+                        filtered = filtered[filtered['Fee_Payment_Status'] == fee]
                     return filtered
 
-                group1_df = filter_df(student_df, dept1, tier1)
-                group2_df = filter_df(student_df, dept2, tier2)
+                group1_df = filter_df(student_df, dept1, tier1, scholar1, fee1)
+                group2_df = filter_df(student_df, dept2, tier2, scholar2, fee2)
 
                 st.divider()
                 st.subheader("Comparison Results")
 
                 if group1_df.empty or group2_df.empty:
-                    st.warning("One or both of the selected groups have no students. Please change your filters.")
+                    st.warning("One or both of the selected groups have no students. Please adjust your filters.")
                 else:
-                    g1_total = len(group1_df)
-                    g1_at_risk = group1_df['is_at_risk'].sum()
-                    g1_rate = (g1_at_risk / g1_total * 100) if g1_total > 0 else 0
+                    g1_rate = (group1_df['is_at_risk'].sum() / len(group1_df) * 100)
                     g1_cgpa = group1_df['Final_CGPA'].mean()
+                    g1_attendance = group1_df['Avg_Attendance'].mean()
 
-                    g2_total = len(group2_df)
-                    g2_at_risk = group2_df['is_at_risk'].sum()
-                    g2_rate = (g2_at_risk / g2_total * 100) if g2_total > 0 else 0
+                    g2_rate = (group2_df['is_at_risk'].sum() / len(group2_df) * 100)
                     g2_cgpa = group2_df['Final_CGPA'].mean()
+                    g2_attendance = group2_df['Avg_Attendance'].mean()
+                    
+                    # Create a DataFrame for plotting
+                    comparison_data = {
+                        "Group 1 ({} students)".format(len(group1_df)): [g1_rate, g1_cgpa, g1_attendance],
+                        "Group 2 ({} students)".format(len(group2_df)): [g2_rate, g2_cgpa, g2_attendance]
+                    }
+                    plot_df = pd.DataFrame(comparison_data, index=["Predicted Attrition Rate (%)", "Average Final CGPA", "Average Attendance (%)"])
+                    
+                    st.bar_chart(plot_df)
+                    
+                    st.info(
+                        """
+                        **How to Interpret this Chart:**
+                        - **Predicted Attrition Rate**: A higher bar indicates a group with a greater predicted risk of students dropping out.
+                        - **Average Final CGPA**: A lower bar suggests the group is struggling more academically.
+                        - **Average Attendance**: A lower bar can be a leading indicator of disengagement.
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Group 1: {dept1} Dept, Tier {tier1}**")
-                        st.metric("Total Students", g1_total)
-                        st.metric("Predicted Attrition Rate", f"{g1_rate:.2f}%")
-                        st.metric("Average Final CGPA", f"{g1_cgpa:.2f}")
-                    with col2:
-                        st.write(f"**Group 2: {dept2} Dept, Tier {tier2}**")
-                        st.metric("Total Students", g2_total)
-                        st.metric("Predicted Attrition Rate", f"{g2_rate:.2f}%")
-                        st.metric("Average Final CGPA", f"{g2_cgpa:.2f}")
+                        Use this visual to quickly identify which student segments require the most attention and resources.
+                        """, icon="🔬"
+                    )
 
         # --- Page: Financial 'What-If' Simulator ---
         elif page == "Financial 'What-If' Simulator":
