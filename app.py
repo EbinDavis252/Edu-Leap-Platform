@@ -404,6 +404,7 @@ else:
                     st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="💡")
 
         # --- Page: Risk Prediction ---
+        # --- Page: Risk Prediction ---
         elif page == "Risk Prediction":
             st.header("🔍 Manual Risk Prediction")
             with st.container():
@@ -424,30 +425,44 @@ else:
                         entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
                         scholarship = st.selectbox("Scholarship Recipient", options=sorted(student_df['Scholarship_Recipient'].unique()))
                     
-                    # FIX: Use the pre-built map for robust department lookup
+                    # FIX: Safely handle the course and department selection
                     course_to_dept_map = st.session_state.course_to_dept_map
-                    course_name = st.selectbox("Course Name", options=sorted(course_to_dept_map.keys()))
-                    department = course_to_dept_map[course_name]
-                    st.info(f"Selected Department: **{department}**")
+                    available_courses = sorted(course_to_dept_map.keys())
                     
+                    # Let the user select a course from the available options
+                    course_name = st.selectbox("Course Name", options=available_courses)
+                    
+                    department = None # Initialize department as None
+                    # Only try to get the department if a course was actually selected
+                    if course_name:
+                        department = course_to_dept_map.get(course_name)
+                        st.info(f"Selected Department: **{department}**")
+                    else:
+                        # Show a warning if no courses are in the data
+                        st.warning("No courses available to select. Please check your uploaded data file.")
+
                     avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
                     final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0, step=0.1)
                     
                     submitted = st.form_submit_button("🔮 Predict Risk")
                 
                 if submitted:
-                    model_features = model.feature_names_in_
-                    input_data_df = pd.DataFrame({'Age': [age], 'City_Tier': [city_tier], 'State': [state], '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc], 'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name], 'Department': [department], 'Fee_Payment_Status': [fee_status], 'Scholarship_Recipient': [scholarship], 'Extracurricular_Activity_Count': [extracurricular_count], 'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]})
-                    input_data_df = input_data_df[model_features]
-                    prediction_proba = model.predict_proba(input_data_df)[0][1]
-                    risk_score = prediction_proba * 100
-                    st.subheader("Results")
-                    if risk_score > 60:
-                        st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
-                    elif risk_score > 30:
-                        st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
+                    # FIX: Add a guard to ensure prediction doesn't run with invalid data
+                    if not department:
+                        st.error("Cannot predict risk. No course was selected or available in the data.")
                     else:
-                        st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
+                        model_features = model.feature_names_in_
+                        input_data_df = pd.DataFrame({'Age': [age], 'City_Tier': [city_tier], 'State': [state], '10th_Percentage': [tenth_perc], '12th_Percentage': [twelfth_perc], 'Entrance_Exam_Score': [entrance_score], 'Course_Name': [course_name], 'Department': [department], 'Fee_Payment_Status': [fee_status], 'Scholarship_Recipient': [scholarship], 'Extracurricular_Activity_Count': [extracurricular_count], 'Avg_Attendance': [avg_attendance], 'Final_CGPA': [final_cgpa]})
+                        input_data_df = input_data_df[model_features]
+                        prediction_proba = model.predict_proba(input_data_df)[0][1]
+                        risk_score = prediction_proba * 100
+                        st.subheader("Results")
+                        if risk_score > 60:
+                            st.error(f"**High Risk:** {risk_score:.2f}% probability of dropout.", icon="🚨")
+                        elif risk_score > 30:
+                            st.warning(f"**Medium Risk:** {risk_score:.2f}% probability of dropout.", icon="⚠️")
+                        else:
+                            st.success(f"**Low Risk:** {risk_score:.2f}% probability of dropout.", icon="✅")
 
         # --- Page: Student Profile Deep Dive ---
         elif page == "Student Profile Deep Dive":
