@@ -398,7 +398,8 @@ else:
                     st.info("Tracks the average final CGPA for each cohort. A declining trend could indicate issues with academic rigor or student preparedness.", icon="💡")
                 with col2:
                     st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
-                    st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="�")
+                    # FIX: Replaced the invalid '�' character with a valid emoji '📊'
+                    st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="📊")
 
         # --- Page: Risk Prediction ---
         elif page == "Risk Prediction":
