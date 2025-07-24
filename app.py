@@ -5,6 +5,7 @@ import joblib
 import io
 import base64
 from fpdf import FPDF
+import hashlib # FIX: Imported hashlib for robust seeding
 
 # --- Page Configuration (MUST be the first Streamlit command) ---
 st.set_page_config(
@@ -110,6 +111,9 @@ if 'registration_success' not in st.session_state:
     st.session_state['registration_success'] = False
 if 'student_df' not in st.session_state:
     st.session_state['student_df'] = None
+# FIX: Added new session state keys for robust data handling
+if 'course_to_dept_map' not in st.session_state:
+    st.session_state['course_to_dept_map'] = {}
 
 
 # --- File Paths ---
@@ -132,6 +136,11 @@ def load_and_prepare_data(uploaded_file):
     """Reads data from the user's uploaded file and prepares it."""
     try:
         df = pd.read_csv(uploaded_file)
+        # FIX: Added a critical check for the StudentID column
+        if 'StudentID' not in df.columns:
+            st.error("Fatal Error: 'StudentID' column is missing from the uploaded file. This column is required for the application to function.")
+            return None
+
         # Ensure required columns exist for synthetic data generation if needed
         if 'Joining_Year' not in df.columns:
             np.random.seed(42)
@@ -211,6 +220,7 @@ def generate_pdf(metrics, top_at_risk):
     # Create table rows
     for index, row in top_at_risk.head(10).iterrows():
         student_id = str(row['StudentID'])
+        # This encoding handles potential unicode characters that FPDF doesn't support
         course_name = str(row['Course_Name']).encode('latin-1', 'replace').decode('latin-1')
         risk_prob = f"{row['Risk_Probability_%']:.2f}"
         
@@ -279,6 +289,9 @@ else:
                 df['is_at_risk'] = predictions
                 df['Risk_Probability_%'] = (risk_probabilities * 100)
                 st.session_state.student_df = df # Store the processed dataframe in session state
+                
+                # FIX: Create and store the course-to-department map for robust lookup later
+                st.session_state.course_to_dept_map = df.drop_duplicates(subset=['Course_Name']).set_index('Course_Name')['Department'].to_dict()
         else:
             st.session_state.student_df = "error"
 
@@ -315,7 +328,7 @@ else:
                 col1.metric("👥 Total Students", f"{total_students}")
                 col2.metric("❗ Predicted At-Risk", f"{num_at_risk}")
                 col3.metric("📉 Predicted Attrition Rate", f"{attrition_rate:.2f}%")
-                st.info("These metrics provide a high-level snapshot of the student body's current risk profile based on the predictive model.", icon="�")
+                st.info("These metrics provide a high-level snapshot of the student body's current risk profile based on the predictive model.", icon="🧠")
                 
                 st.divider()
 
@@ -411,9 +424,12 @@ else:
                         entrance_score = st.number_input("Entrance Exam Score", 0.0, 100.0, 75.0, format="%.2f")
                         scholarship = st.selectbox("Scholarship Recipient", options=sorted(student_df['Scholarship_Recipient'].unique()))
                     
-                    course_name = st.selectbox("Course Name", options=sorted(student_df['Course_Name'].unique()))
-                    department = student_df[student_df['Course_Name'] == course_name]['Department'].iloc[0]
+                    # FIX: Use the pre-built map for robust department lookup
+                    course_to_dept_map = st.session_state.course_to_dept_map
+                    course_name = st.selectbox("Course Name", options=sorted(course_to_dept_map.keys()))
+                    department = course_to_dept_map[course_name]
                     st.info(f"Selected Department: **{department}**")
+                    
                     avg_attendance = st.slider("Assumed Average Attendance (%)", 0, 100, 75)
                     final_cgpa = st.slider("Assumed Final CGPA", 0.0, 10.0, 8.0, step=0.1)
                     
@@ -463,7 +479,11 @@ else:
                     
                     st.divider()
                     st.subheader("Simulated Performance Trends")
-                    np.random.seed(int(student_id_to_view))
+                    
+                    # FIX: Use a robust hash-based seed for reproducibility with any StudentID format
+                    seed_value = int(hashlib.md5(str(student_id_to_view).encode()).hexdigest(), 16) % (10**8)
+                    np.random.seed(seed_value)
+
                     semesters = [f"Sem {i}" for i in range(1, 7)]
                     sgpa_trend = np.random.normal(loc=student_data['Final_CGPA'], scale=0.5, size=6)
                     sgpa_trend = np.clip(sgpa_trend, 0, 10)
