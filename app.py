@@ -275,20 +275,27 @@ else:
     if uploaded_file is not None and st.session_state.student_df is None:
         df = load_and_prepare_data(uploaded_file)
         if df is not None:
-            model_features = model.feature_names_in_
-            if not all(feature in df.columns for feature in model_features):
-                st.error("The uploaded CSV is missing one or more required columns for prediction. Please check your file.")
-                st.session_state.student_df = "error" # Mark as error to prevent further processing
+            # FIX: Add a specific check for columns required for UI functionality
+            required_ui_cols = ['Course_Name', 'Department']
+            if not all(col in df.columns for col in required_ui_cols):
+                st.error(f"The uploaded CSV is missing one or more required columns for the UI to function: {', '.join(required_ui_cols)}. Please check your file.")
+                st.session_state.student_df = "error"
             else:
-                df_for_prediction = df[model_features]
-                predictions = model.predict(df_for_prediction)
-                risk_probabilities = model.predict_proba(df_for_prediction)[:, 1]
-                
-                df['is_at_risk'] = predictions
-                df['Risk_Probability_%'] = (risk_probabilities * 100)
-                st.session_state.student_df = df # Store the processed dataframe in session state
-                
-                st.session_state.course_to_dept_map = df.drop_duplicates(subset=['Course_Name']).set_index('Course_Name')['Department'].to_dict()
+                model_features = model.feature_names_in_
+                if not all(feature in df.columns for feature in model_features):
+                    st.error("The uploaded CSV is missing one or more required columns for prediction. Please check your file.")
+                    st.session_state.student_df = "error" # Mark as error to prevent further processing
+                else:
+                    df_for_prediction = df[model_features]
+                    predictions = model.predict(df_for_prediction)
+                    risk_probabilities = model.predict_proba(df_for_prediction)[:, 1]
+                    
+                    df['is_at_risk'] = predictions
+                    df['Risk_Probability_%'] = (risk_probabilities * 100)
+                    st.session_state.student_df = df # Store the processed dataframe in session state
+                    
+                    # This line is now safe to run
+                    st.session_state.course_to_dept_map = df.drop_duplicates(subset=['Course_Name']).set_index('Course_Name')['Department'].to_dict()
         else:
             st.session_state.student_df = "error"
 
@@ -398,7 +405,6 @@ else:
                     st.info("Tracks the average final CGPA for each cohort. A declining trend could indicate issues with academic rigor or student preparedness.", icon="💡")
                 with col2:
                     st.line_chart(trends.set_index('Joining_Year')['avg_attendance'], color="#0068C9")
-                    # FIX: Replaced the invalid '�' character with a valid emoji '📊'
                     st.info("Tracks the average attendance. A drop in attendance across cohorts can be a leading indicator of disengagement.", icon="📊")
 
         # --- Page: Risk Prediction ---
